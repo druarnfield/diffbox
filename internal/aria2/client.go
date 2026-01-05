@@ -6,12 +6,14 @@ import (
 	"fmt"
 	"net/http"
 	"sync/atomic"
+	"time"
 )
 
 type Client struct {
-	url     string
-	secret  string
-	counter uint64
+	url        string
+	secret     string
+	counter    uint64
+	httpClient *http.Client
 }
 
 type Request struct {
@@ -46,6 +48,9 @@ func NewClient(host string, port int, secret string) *Client {
 	return &Client{
 		url:    fmt.Sprintf("http://%s:%d/jsonrpc", host, port),
 		secret: secret,
+		httpClient: &http.Client{
+			Timeout: 30 * time.Second,
+		},
 	}
 }
 
@@ -69,11 +74,15 @@ func (c *Client) call(method string, params ...interface{}) (json.RawMessage, er
 		return nil, fmt.Errorf("marshal request: %w", err)
 	}
 
-	resp, err := http.Post(c.url, "application/json", bytes.NewReader(body))
+	resp, err := c.httpClient.Post(c.url, "application/json", bytes.NewReader(body))
 	if err != nil {
 		return nil, fmt.Errorf("http post: %w", err)
 	}
 	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("unexpected status code: %d", resp.StatusCode)
+	}
 
 	var rpcResp Response
 	if err := json.NewDecoder(resp.Body).Decode(&rpcResp); err != nil {

@@ -148,8 +148,21 @@ func startAria2(cfg *config.Config) (*exec.Cmd, error) {
 }
 
 func stopProcess(cmd *exec.Cmd) {
-	if cmd != nil && cmd.Process != nil {
-		cmd.Process.Signal(syscall.SIGTERM)
-		cmd.Wait()
+	if cmd == nil || cmd.Process == nil {
+		return
+	}
+
+	cmd.Process.Signal(syscall.SIGTERM)
+
+	done := make(chan error, 1)
+	go func() {
+		done <- cmd.Wait()
+	}()
+
+	select {
+	case <-done:
+		return
+	case <-time.After(5 * time.Second):
+		cmd.Process.Kill()
 	}
 }
