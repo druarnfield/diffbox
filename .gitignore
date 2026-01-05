@@ -1,0 +1,59 @@
+# Binaries
+diffbox
+*.exe
+*.dll
+*.so
+*.dylib
+
+# Go
+vendor/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv/
+venv/
+ENV/
+.uv/
+
+# Node
+node_modules/
+web/dist/
+.npm
+
+# Data directories (runtime)
+data/
+models/
+outputs/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Environment
+.env
+.env.local
+*.env
+
+# Logs
+*.log
+logs/
+
+# Test
+coverage.out
+.coverage
+htmlcov/
+
+# Build
+dist/
+build/
