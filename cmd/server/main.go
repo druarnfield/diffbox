@@ -69,11 +69,16 @@ func main() {
 	aria2Client := aria2.NewClient("localhost", aria2Port, "")
 
 	// Wait for aria2 to be ready
+	aria2Ready := false
 	for i := 0; i < 10; i++ {
 		if _, err := aria2Client.GetVersion(); err == nil {
+			aria2Ready = true
 			break
 		}
 		time.Sleep(500 * time.Millisecond)
+	}
+	if !aria2Ready {
+		log.Fatalf("aria2 failed to become ready after 10 attempts")
 	}
 
 	// Download missing models

@@ -135,6 +135,13 @@ func (d *Downloader) findMissing(models []ModelFile) []ModelFile {
 			continue
 		}
 
+		if err != nil {
+			// Permission or other error - treat as missing
+			log.Printf("Cannot stat %s: %v (will download)", model.Name, err)
+			missing = append(missing, model)
+			continue
+		}
+
 		// Check size (allow 1% tolerance for filesystem differences)
 		if info.Size() < int64(float64(model.Size)*0.99) {
 			log.Printf("Incomplete: %s (%.2f GB / %.2f GB)",
@@ -181,6 +188,12 @@ func (d *Downloader) waitForDownloads(gids map[string]ModelFile) error {
 					log.Printf("Downloading %s: %.1f%% (%.2f MB/s)",
 						model.Name, pct, float64(speed)/1e6)
 				}
+
+			case "waiting":
+				log.Printf("Waiting: %s (queued)", model.Name)
+
+			case "paused":
+				log.Printf("Paused: %s (resuming...)", model.Name)
 			}
 		}
 	}
