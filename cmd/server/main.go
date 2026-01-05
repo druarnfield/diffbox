@@ -70,15 +70,25 @@ func main() {
 
 	// Wait for aria2 to be ready
 	aria2Ready := false
+	var lastErr error
 	for i := 0; i < 10; i++ {
-		if _, err := aria2Client.GetVersion(); err == nil {
+		// Check if process is still running
+		if aria2Process.ProcessState != nil {
+			log.Fatalf("aria2 process exited prematurely with state: %v", aria2Process.ProcessState)
+		}
+
+		version, err := aria2Client.GetVersion()
+		if err == nil {
+			log.Printf("aria2 is ready (version: %s)", version)
 			aria2Ready = true
 			break
 		}
+		lastErr = err
+		log.Printf("Waiting for aria2 to be ready (attempt %d/10): %v", i+1, err)
 		time.Sleep(500 * time.Millisecond)
 	}
 	if !aria2Ready {
-		log.Fatalf("aria2 failed to become ready after 10 attempts")
+		log.Fatalf("aria2 failed to become ready after 10 attempts. Last error: %v", lastErr)
 	}
 
 	// Download missing models
@@ -184,6 +194,7 @@ func startAria2(cfg *config.Config) (*exec.Cmd, error) {
 		"--rpc-listen-all=false",
 		fmt.Sprintf("--rpc-listen-port=%s", cfg.Aria2Port),
 		"--rpc-allow-origin-all",
+		"--disable-ipv6",
 		fmt.Sprintf("--max-connection-per-server=%d", cfg.Aria2MaxConnections),
 		"--split=16",
 		"--min-split-size=1M",
@@ -193,7 +204,7 @@ func startAria2(cfg *config.Config) (*exec.Cmd, error) {
 		"--allow-overwrite=true",
 		fmt.Sprintf("--dir=%s", cfg.ModelsDir),
 		"--daemon=false",
-		"--quiet=true",
+		"--console-log-level=notice",
 	)
 
 	cmd.Stdout = os.Stdout
