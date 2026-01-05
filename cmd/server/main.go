@@ -96,7 +96,37 @@ func main() {
 	defer workerManager.Stop()
 
 	// Create router
-	router := api.NewRouter(cfg, database, q)
+	router, wsHub := api.NewRouter(cfg, database, q)
+
+	// Wire up worker callbacks to WebSocket hub
+	workerManager.SetCallbacks(
+		// Progress callback
+		func(progress worker.ProgressUpdate) {
+			wsHub.BroadcastJobProgress(api.JobProgress{
+				JobID:    progress.JobID,
+				Progress: progress.Progress,
+				Stage:    progress.Stage,
+				Preview:  progress.Preview,
+			})
+		},
+		// Complete callback
+		func(result worker.JobResult) {
+			wsHub.BroadcastJobComplete(api.JobComplete{
+				JobID: result.JobID,
+				Output: api.JobOutput{
+					Type: "output",
+					Path: result.Output,
+				},
+			})
+		},
+		// Error callback
+		func(result worker.JobResult) {
+			wsHub.BroadcastJobError(api.JobError{
+				JobID: result.JobID,
+				Error: result.Error,
+			})
+		},
+	)
 
 	// Create server
 	server := &http.Server{

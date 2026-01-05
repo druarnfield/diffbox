@@ -18,16 +18,18 @@ type Server struct {
 	hub   *WebSocketHub
 }
 
-func NewRouter(cfg *config.Config, database *db.DB, q queue.Queue) http.Handler {
+// NewRouter creates a new HTTP router and returns it along with the WebSocket hub
+func NewRouter(cfg *config.Config, database *db.DB, q queue.Queue) (http.Handler, *WebSocketHub) {
+	hub := NewWebSocketHub()
 	s := &Server{
 		cfg:   cfg,
 		db:    database,
 		queue: q,
-		hub:   NewWebSocketHub(),
+		hub:   hub,
 	}
 
 	// Start WebSocket hub
-	go s.hub.Run()
+	go hub.Run()
 
 	r := chi.NewRouter()
 
@@ -87,7 +89,7 @@ func NewRouter(cfg *config.Config, database *db.DB, q queue.Queue) http.Handler 
 	fileServer := http.FileServer(http.Dir(cfg.StaticDir))
 	r.Handle("/*", http.StripPrefix("/", fileServer))
 
-	return r
+	return r, hub
 }
 
 func corsMiddleware(next http.Handler) http.Handler {
