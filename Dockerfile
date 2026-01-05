@@ -6,19 +6,20 @@ FROM nvidia/cuda:12.1.1-runtime-ubuntu22.04
 # Prevent interactive prompts
 ENV DEBIAN_FRONTEND=noninteractive
 
-# Install system dependencies
+# Install system dependencies including Redis (Valkey-compatible)
 RUN apt-get update && apt-get install -y \
     aria2 \
     curl \
     git \
     ffmpeg \
+    redis-server \
     && rm -rf /var/lib/apt/lists/*
+
+# Create symlink for valkey-server (Redis is API-compatible)
+RUN ln -s /usr/bin/redis-server /usr/local/bin/valkey-server
 
 # Install uv (Python package manager)
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
-
-# Install Valkey (Redis fork)
-COPY --from=valkey/valkey:7-alpine /usr/local/bin/valkey-server /usr/local/bin/
 
 # Create app directory
 WORKDIR /app
@@ -54,6 +55,6 @@ EXPOSE 8080
 HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
     CMD curl -f http://localhost:8080/api/health || exit 1
 
-# Run diffbox (which spawns Valkey, aria2, and Python workers)
+# Run diffbox (which spawns Redis/Valkey, aria2, and Python workers)
 WORKDIR /app
 ENTRYPOINT ["/usr/local/bin/diffbox"]
