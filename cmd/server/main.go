@@ -2,16 +2,21 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"net/http"
 	"os"
+	"os/exec"
 	"os/signal"
+	"strconv"
 	"syscall"
 	"time"
 
 	"github.com/druarnfield/diffbox/internal/api"
+	"github.com/druarnfield/diffbox/internal/aria2"
 	"github.com/druarnfield/diffbox/internal/config"
 	"github.com/druarnfield/diffbox/internal/db"
+	"github.com/druarnfield/diffbox/internal/models"
 	"github.com/druarnfield/diffbox/internal/queue"
 	"github.com/druarnfield/diffbox/internal/worker"
 )
@@ -56,6 +61,33 @@ func main() {
 	}
 	defer stopProcess(aria2Process)
 
+	// Create aria2 client and wait for it to be ready
+	aria2Port, err := strconv.Atoi(cfg.Aria2Port)
+	if err != nil {
+		log.Fatalf("Invalid aria2 port: %v", err)
+	}
+	aria2Client := aria2.NewClient("localhost", aria2Port, "")
+
+	// Wait for aria2 to be ready
+	aria2Ready := false
+	for i := 0; i < 10; i++ {
+		if _, err := aria2Client.GetVersion(); err == nil {
+			aria2Ready = true
+			break
+		}
+		time.Sleep(500 * time.Millisecond)
+	}
+	if !aria2Ready {
+		log.Fatalf("aria2 failed to become ready after 10 attempts")
+	}
+
+	// Download missing models
+	hfToken := os.Getenv("HF_TOKEN")
+	downloader := models.NewDownloader(aria2Client, cfg.ModelsDir, hfToken)
+	if err := downloader.CheckAndDownload(); err != nil {
+		log.Fatalf("Model download failed: %v", err)
+	}
+
 	// Start Python workers
 	workerManager := worker.NewManager(cfg)
 	if err := workerManager.Start(); err != nil {
@@ -64,7 +96,37 @@ func main() {
 	defer workerManager.Stop()
 
 	// Create router
-	router := api.NewRouter(cfg, database, q)
+	router, wsHub := api.NewRouter(cfg, database, q)
+
+	// Wire up worker callbacks to WebSocket hub
+	workerManager.SetCallbacks(
+		// Progress callback
+		func(progress worker.ProgressUpdate) {
+			wsHub.BroadcastJobProgress(api.JobProgress{
+				JobID:    progress.JobID,
+				Progress: progress.Progress,
+				Stage:    progress.Stage,
+				Preview:  progress.Preview,
+			})
+		},
+		// Complete callback
+		func(result worker.JobResult) {
+			wsHub.BroadcastJobComplete(api.JobComplete{
+				JobID: result.JobID,
+				Output: api.JobOutput{
+					Type: "output",
+					Path: result.Output,
+				},
+			})
+		},
+		// Error callback
+		func(result worker.JobResult) {
+			wsHub.BroadcastJobError(api.JobError{
+				JobID: result.JobID,
+				Error: result.Error,
+			})
+		},
+	)
 
 	// Create server
 	server := &http.Server{
@@ -96,21 +158,71 @@ func main() {
 	log.Println("Goodbye!")
 }
 
-func startValkey(cfg *config.Config) (*os.Process, error) {
-	// TODO: Implement Valkey process spawning
-	log.Println("Starting Valkey...")
-	return nil, nil
+func startValkey(cfg *config.Config) (*exec.Cmd, error) {
+	cmd := exec.Command("valkey-server",
+		"--port", cfg.ValkeyPort,
+		"--bind", "127.0.0.1",
+		"--daemonize", "no",
+		"--appendonly", "no",
+		"--save", "",
+	)
+
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+
+	if err := cmd.Start(); err != nil {
+		return nil, fmt.Errorf("start valkey: %w", err)
+	}
+
+	log.Printf("Valkey started with PID %d on port %s", cmd.Process.Pid, cfg.ValkeyPort)
+	return cmd, nil
 }
 
-func startAria2(cfg *config.Config) (*os.Process, error) {
-	// TODO: Implement aria2 process spawning
-	log.Println("Starting aria2...")
-	return nil, nil
+func startAria2(cfg *config.Config) (*exec.Cmd, error) {
+	cmd := exec.Command("aria2c",
+		"--enable-rpc",
+		"--rpc-listen-all=false",
+		fmt.Sprintf("--rpc-listen-port=%s", cfg.Aria2Port),
+		"--rpc-allow-origin-all",
+		fmt.Sprintf("--max-connection-per-server=%d", cfg.Aria2MaxConnections),
+		"--split=16",
+		"--min-split-size=1M",
+		"--max-concurrent-downloads=4",
+		"--continue=true",
+		"--auto-file-renaming=false",
+		"--allow-overwrite=true",
+		fmt.Sprintf("--dir=%s", cfg.ModelsDir),
+		"--daemon=false",
+		"--quiet=true",
+	)
+
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+
+	if err := cmd.Start(); err != nil {
+		return nil, fmt.Errorf("start aria2: %w", err)
+	}
+
+	log.Printf("aria2 started with PID %d on port %s", cmd.Process.Pid, cfg.Aria2Port)
+	return cmd, nil
 }
 
-func stopProcess(p *os.Process) {
-	if p != nil {
-		p.Signal(syscall.SIGTERM)
-		p.Wait()
+func stopProcess(cmd *exec.Cmd) {
+	if cmd == nil || cmd.Process == nil {
+		return
+	}
+
+	cmd.Process.Signal(syscall.SIGTERM)
+
+	done := make(chan error, 1)
+	go func() {
+		done <- cmd.Wait()
+	}()
+
+	select {
+	case <-done:
+		return
+	case <-time.After(5 * time.Second):
+		cmd.Process.Kill()
 	}
 }

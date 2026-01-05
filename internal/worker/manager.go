@@ -13,10 +13,22 @@ import (
 	"github.com/druarnfield/diffbox/internal/config"
 )
 
+// ProgressCallback is called when a worker reports progress
+type ProgressCallback func(ProgressUpdate)
+
+// CompleteCallback is called when a worker completes a job
+type CompleteCallback func(JobResult)
+
+// ErrorCallback is called when a worker reports an error
+type ErrorCallback func(JobResult)
+
 type Manager struct {
-	cfg       *config.Config
-	workers   []*Worker
-	mu        sync.Mutex
+	cfg              *config.Config
+	workers          []*Worker
+	mu               sync.Mutex
+	onProgress       ProgressCallback
+	onComplete       CompleteCallback
+	onError          ErrorCallback
 }
 
 type Worker struct {
@@ -59,6 +71,15 @@ func NewManager(cfg *config.Config) *Manager {
 		cfg:     cfg,
 		workers: make([]*Worker, 0),
 	}
+}
+
+// SetCallbacks sets the callback functions for worker events
+func (m *Manager) SetCallbacks(onProgress ProgressCallback, onComplete CompleteCallback, onError ErrorCallback) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.onProgress = onProgress
+	m.onComplete = onComplete
+	m.onError = onError
 }
 
 func (m *Manager) Start() error {
@@ -156,21 +177,36 @@ func (m *Manager) handleWorkerOutput(w *Worker) {
 		switch msg.Type {
 		case "progress":
 			var progress ProgressUpdate
-			json.Unmarshal(msg.Data, &progress)
-			// TODO: Broadcast via WebSocket hub
+			if err := json.Unmarshal(msg.Data, &progress); err != nil {
+				log.Printf("Worker %d: invalid progress data: %v", w.id, err)
+				continue
+			}
 			log.Printf("Worker %d: job %s progress %.1f%% - %s", w.id, progress.JobID, progress.Progress*100, progress.Stage)
+			if m.onProgress != nil {
+				m.onProgress(progress)
+			}
 
 		case "complete":
 			var result JobResult
-			json.Unmarshal(msg.Data, &result)
-			// TODO: Update job in database, broadcast via WebSocket
+			if err := json.Unmarshal(msg.Data, &result); err != nil {
+				log.Printf("Worker %d: invalid result data: %v", w.id, err)
+				continue
+			}
 			log.Printf("Worker %d: job %s completed: %s", w.id, result.JobID, result.Output)
+			if m.onComplete != nil {
+				m.onComplete(result)
+			}
 
 		case "error":
 			var result JobResult
-			json.Unmarshal(msg.Data, &result)
-			// TODO: Update job in database, broadcast via WebSocket
+			if err := json.Unmarshal(msg.Data, &result); err != nil {
+				log.Printf("Worker %d: invalid error data: %v", w.id, err)
+				continue
+			}
 			log.Printf("Worker %d: job %s failed: %s", w.id, result.JobID, result.Error)
+			if m.onError != nil {
+				m.onError(result)
+			}
 
 		case "ready":
 			log.Printf("Worker %d: ready", w.id)
