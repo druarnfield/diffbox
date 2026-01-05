@@ -2,7 +2,9 @@ package api
 
 import (
 	"encoding/json"
+	"log"
 	"net/http"
+	"sync/atomic"
 )
 
 type UserConfig struct {
@@ -116,7 +118,16 @@ func (s *Server) handleUpdateTokens(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
+var healthCheckCount int32
+
 func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
+	count := atomic.AddInt32(&healthCheckCount, 1)
+
+	// Only log first health check and failures
+	if count == 1 {
+		log.Println("Health check: OK (subsequent checks will not be logged)")
+	}
+
 	health := map[string]interface{}{
 		"status":  "ok",
 		"version": "0.1.0",

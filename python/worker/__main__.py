@@ -8,6 +8,15 @@ import json
 import sys
 import os
 import traceback
+import logging
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(levelname)s [%(name)s] %(message)s',
+    stream=sys.stderr
+)
+logger = logging.getLogger('worker')
 
 # Add parent directory to path for diffsynth import
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -21,10 +30,9 @@ def main():
     models_dir = os.environ.get("DIFFBOX_MODELS_DIR", "./models")
     outputs_dir = os.environ.get("DIFFBOX_OUTPUTS_DIR", "./outputs")
 
-    # Log to stderr (stdout is for JSON protocol)
-    print(f"Worker {worker_id} starting...", file=sys.stderr)
-    print(f"Models dir: {models_dir}", file=sys.stderr)
-    print(f"Outputs dir: {outputs_dir}", file=sys.stderr)
+    logger.info(f"Worker {worker_id} starting...")
+    logger.info(f"Models dir: {models_dir}")
+    logger.info(f"Outputs dir: {outputs_dir}")
 
     # Lazy import handlers to avoid loading models until needed
     handlers = {}
@@ -57,7 +65,7 @@ def main():
             msg_type = msg.get("type")
 
             if msg_type == "shutdown":
-                print(f"Worker {worker_id} shutting down...", file=sys.stderr)
+                logger.info(f"Worker {worker_id} shutting down...")
                 break
 
             elif msg_type == "job":
@@ -66,22 +74,25 @@ def main():
                 job_type = job_data.get("type")
                 params = job_data.get("params", {})
 
-                print(f"Worker {worker_id} processing job {job_id} ({job_type})", file=sys.stderr)
+                logger.info(f"Processing job {job_id} ({job_type})")
+                logger.debug(f"Job {job_id} params: {params}")
 
                 try:
                     handler = get_handler(job_type)
                     result = handler.run(job_id, params)
                     send_complete(job_id, result)
+                    logger.info(f"Job {job_id} completed successfully")
                 except Exception as e:
-                    print(f"Job {job_id} failed: {e}", file=sys.stderr)
-                    traceback.print_exc(file=sys.stderr)
-                    send_error(job_id, str(e))
+                    error_msg = f"{type(e).__name__}: {str(e)}"
+                    logger.error(f"Job {job_id} failed: {error_msg}")
+                    logger.error(f"Job {job_id} parameters: {params}")
+                    logger.error(f"Traceback:", exc_info=True)
+                    send_error(job_id, error_msg)
 
         except json.JSONDecodeError as e:
-            print(f"Invalid JSON: {e}", file=sys.stderr)
+            logger.error(f"Invalid JSON: {e}")
         except Exception as e:
-            print(f"Worker error: {e}", file=sys.stderr)
-            traceback.print_exc(file=sys.stderr)
+            logger.error(f"Worker error: {e}", exc_info=True)
 
 
 if __name__ == "__main__":

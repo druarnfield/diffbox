@@ -5,6 +5,8 @@ Wan 2.2 Image-to-Video handler with real diffsynth inference.
 import sys
 import subprocess
 import tempfile
+import time
+import logging
 from pathlib import Path
 from typing import Optional
 import base64
@@ -18,6 +20,8 @@ from worker.protocol import send_progress
 # Import diffsynth components
 from diffsynth.pipelines.wan_video import WanVideoPipeline
 from diffsynth.core import ModelConfig
+
+logger = logging.getLogger('worker.i2v')
 
 
 class ProgressTracker:
@@ -55,8 +59,17 @@ class I2VHandler:
         if self.pipeline is not None:
             return
 
-        print("Loading Wan 2.2 I2V pipeline...", file=sys.stderr)
+        logger.info("Loading Wan 2.2 I2V pipeline...")
         send_progress(None, 0.0, "Loading I2V pipeline...")
+
+        # Log GPU info
+        if torch.cuda.is_available():
+            gpu_name = torch.cuda.get_device_name(0)
+            total_memory = torch.cuda.get_device_properties(0).total_memory / 1e9
+            logger.info(f"GPU: {gpu_name}")
+            logger.info(f"Total VRAM: {total_memory:.1f} GB")
+        else:
+            logger.warning("CUDA not available - will run on CPU (very slow!)")
 
         # Model paths (downloaded by aria2 on startup)
         high_noise_path = self.models_dir / "wan2.2_i2v_high_noise_14B_fp16.safetensors"
@@ -67,7 +80,11 @@ class I2VHandler:
         # Validate models exist
         for path in [high_noise_path, low_noise_path, text_encoder_path, vae_path]:
             if not path.exists():
-                raise FileNotFoundError(f"Required model not found: {path}")
+                error_msg = f"Required model not found: {path}"
+                logger.error(error_msg)
+                raise FileNotFoundError(error_msg)
+
+        logger.info("All model files found, initializing pipeline...")
 
         # Create model configs
         model_configs = [
@@ -84,11 +101,21 @@ class I2VHandler:
             model_configs=model_configs,
         )
 
-        print("Pipeline loaded.", file=sys.stderr)
+        # Log VRAM usage after loading
+        if torch.cuda.is_available():
+            allocated = torch.cuda.memory_allocated(0) / 1e9
+            reserved = torch.cuda.memory_reserved(0) / 1e9
+            logger.info(f"Pipeline loaded - VRAM allocated: {allocated:.1f} GB, reserved: {reserved:.1f} GB")
+
         send_progress(None, 0.0, "Pipeline loaded")
 
     def run(self, job_id: str, params: dict) -> dict:
         """Run I2V inference."""
+        start_time = time.time()
+
+        logger.info(f"Starting I2V job {job_id}")
+        logger.info(f"Parameters: {params}")
+
         self._load_pipeline()
 
         # Extract parameters with defaults
@@ -112,15 +139,25 @@ class I2VHandler:
         send_progress(job_id, 0.02, "Decoding input image")
         image_data = base64.b64decode(input_image_b64)
         input_image = Image.open(BytesIO(image_data)).convert("RGB")
+        logger.info(f"Input image size: {input_image.size}")
 
         # Set random seed
         if seed is None or seed == -1:
             seed = torch.randint(0, 2**32 - 1, (1,)).item()
+        logger.info(f"Using seed: {seed}")
+
+        # Log VRAM before inference
+        if torch.cuda.is_available():
+            free_memory = (torch.cuda.get_device_properties(0).total_memory -
+                          torch.cuda.memory_allocated(0)) / 1e9
+            logger.info(f"Free VRAM before inference: {free_memory:.1f} GB")
 
         send_progress(job_id, 0.05, "Starting inference")
 
         # Create progress tracker
         progress_tracker = ProgressTracker(job_id, num_inference_steps)
+
+        inference_start = time.time()
 
         # Run inference
         video_frames = self.pipeline(
@@ -139,12 +176,19 @@ class I2VHandler:
             progress_bar_cmd=progress_tracker,
         )
 
+        inference_duration = time.time() - inference_start
+        fps_generation = num_frames / inference_duration
+        logger.info(f"Inference completed in {inference_duration:.1f}s ({fps_generation:.2f} frames/sec)")
+
         send_progress(job_id, 0.95, "Encoding video")
 
         # Save video
         self.outputs_dir.mkdir(parents=True, exist_ok=True)
         output_path = self.outputs_dir / f"{job_id}.mp4"
         self._save_video(video_frames, output_path)
+
+        total_duration = time.time() - start_time
+        logger.info(f"Job {job_id} total time: {total_duration:.1f}s")
 
         send_progress(job_id, 1.0, "Complete")
 
@@ -157,6 +201,9 @@ class I2VHandler:
 
     def _save_video(self, frames: list, output_path: Path, fps: int = 24):
         """Save frames as MP4 video using ffmpeg."""
+        encode_start = time.time()
+        logger.info(f"Encoding {len(frames)} frames to video at {fps} fps...")
+
         with tempfile.TemporaryDirectory() as tmpdir:
             # Save frames as images
             for i, frame in enumerate(frames):
@@ -182,7 +229,7 @@ class I2VHandler:
                 frame.save(f"{tmpdir}/frame_{i:05d}.png")
 
             # Encode with ffmpeg
-            subprocess.run(
+            result = subprocess.run(
                 [
                     "ffmpeg", "-y",
                     "-framerate", str(fps),
@@ -193,6 +240,15 @@ class I2VHandler:
                     str(output_path)
                 ],
                 capture_output=True,
-                check=True,
+                check=False,
             )
-            print(f"Video saved to {output_path}", file=sys.stderr)
+
+            if result.returncode != 0:
+                error_msg = result.stderr.decode('utf-8', errors='replace')
+                logger.error(f"ffmpeg encoding failed (exit code {result.returncode})")
+                logger.error(f"ffmpeg stderr: {error_msg}")
+                raise RuntimeError(f"Video encoding failed: {error_msg[:500]}")  # Truncate long error
+
+            encode_duration = time.time() - encode_start
+            logger.info(f"Video encoded in {encode_duration:.1f}s")
+            logger.info(f"Video saved to {output_path}")

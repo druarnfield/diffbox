@@ -8,6 +8,7 @@ import (
 	"log"
 	"os"
 	"os/exec"
+	"strings"
 	"sync"
 
 	"github.com/druarnfield/diffbox/internal/config"
@@ -203,7 +204,7 @@ func (m *Manager) handleWorkerOutput(w *Worker) {
 				log.Printf("Worker %d: invalid error data: %v", w.id, err)
 				continue
 			}
-			log.Printf("Worker %d: job %s failed: %s", w.id, result.JobID, result.Error)
+			log.Printf("ERROR - Worker %d: job %s FAILED: %s", w.id, result.JobID, result.Error)
 			if m.onError != nil {
 				m.onError(result)
 			}
@@ -217,7 +218,18 @@ func (m *Manager) handleWorkerOutput(w *Worker) {
 func (m *Manager) handleWorkerLogs(w *Worker) {
 	scanner := bufio.NewScanner(w.stderr)
 	for scanner.Scan() {
-		log.Printf("Worker %d [stderr]: %s", w.id, scanner.Text())
+		line := scanner.Text()
+
+		// Filter out noisy Python warnings
+		if strings.Contains(line, "UserWarning") ||
+			strings.Contains(line, "FutureWarning") ||
+			strings.Contains(line, "DeprecationWarning") ||
+			strings.Contains(line, "/site-packages/") {
+			continue
+		}
+
+		// Log with worker ID prefix (removed [stderr])
+		log.Printf("Worker %d: %s", w.id, line)
 	}
 }
 
@@ -231,6 +243,14 @@ func (m *Manager) SubmitJob(job *JobRequest) error {
 	}
 
 	worker := m.workers[0] // TODO: Implement proper scheduling
+
+	// Log job submission with sanitized params
+	log.Printf("Submitting job %s (type=%s, worker=%d)", job.ID, job.Type, worker.id)
+	log.Printf("Job %s params: steps=%v, cfg=%v, seed=%v",
+		job.ID,
+		job.Params["num_inference_steps"],
+		job.Params["cfg_scale"],
+		job.Params["seed"])
 
 	msg := WorkerMessage{
 		Type:  "job",
