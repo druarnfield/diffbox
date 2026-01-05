@@ -52,7 +52,7 @@ python-worker:
 # Run tests
 test:
 	go test -v ./...
-	cd python && uv run pytest
+	cd python && uv sync --extra dev && uv run pytest
 
 # Clean build artifacts
 clean:
