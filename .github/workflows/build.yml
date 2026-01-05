@@ -38,7 +38,7 @@ jobs:
 
       - name: Install dependencies
         run: |
-          cd python && uv sync --frozen
+          cd python && uv sync --frozen --extra dev
           cd ../web && npm ci
 
       - name: Lint
