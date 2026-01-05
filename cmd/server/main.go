@@ -66,7 +66,11 @@ func main() {
 	if err != nil {
 		log.Fatalf("Invalid aria2 port: %v", err)
 	}
-	aria2Client := aria2.NewClient("localhost", aria2Port, "")
+	// Use 127.0.0.1 instead of localhost to avoid IPv6 resolution issues
+	aria2Client := aria2.NewClient("127.0.0.1", aria2Port, "")
+
+	// Give aria2 a moment to initialize before first connection attempt
+	time.Sleep(1 * time.Second)
 
 	// Wait for aria2 to be ready
 	aria2Ready := false

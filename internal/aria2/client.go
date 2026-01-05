@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"sync/atomic"
 	"time"
@@ -81,7 +82,9 @@ func (c *Client) call(method string, params ...interface{}) (json.RawMessage, er
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("unexpected status code: %d", resp.StatusCode)
+		// Read error response body for debugging
+		errorBody, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("unexpected status code: %d (request: %s, response: %s)", resp.StatusCode, string(body), string(errorBody))
 	}
 
 	var rpcResp Response
