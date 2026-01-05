@@ -2,9 +2,11 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"net/http"
 	"os"
+	"os/exec"
 	"os/signal"
 	"syscall"
 	"time"
@@ -96,21 +98,58 @@ func main() {
 	log.Println("Goodbye!")
 }
 
-func startValkey(cfg *config.Config) (*os.Process, error) {
-	// TODO: Implement Valkey process spawning
-	log.Println("Starting Valkey...")
-	return nil, nil
+func startValkey(cfg *config.Config) (*exec.Cmd, error) {
+	cmd := exec.Command("valkey-server",
+		"--port", cfg.ValkeyPort,
+		"--bind", "127.0.0.1",
+		"--daemonize", "no",
+		"--appendonly", "no",
+		"--save", "",
+	)
+
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+
+	if err := cmd.Start(); err != nil {
+		return nil, fmt.Errorf("start valkey: %w", err)
+	}
+
+	log.Printf("Valkey started with PID %d on port %s", cmd.Process.Pid, cfg.ValkeyPort)
+	return cmd, nil
 }
 
-func startAria2(cfg *config.Config) (*os.Process, error) {
-	// TODO: Implement aria2 process spawning
-	log.Println("Starting aria2...")
-	return nil, nil
+func startAria2(cfg *config.Config) (*exec.Cmd, error) {
+	cmd := exec.Command("aria2c",
+		"--enable-rpc",
+		"--rpc-listen-all=false",
+		fmt.Sprintf("--rpc-listen-port=%s", cfg.Aria2Port),
+		"--rpc-allow-origin-all",
+		fmt.Sprintf("--max-connection-per-server=%d", cfg.Aria2MaxConnections),
+		"--split=16",
+		"--min-split-size=1M",
+		"--max-concurrent-downloads=4",
+		"--continue=true",
+		"--auto-file-renaming=false",
+		"--allow-overwrite=true",
+		fmt.Sprintf("--dir=%s", cfg.ModelsDir),
+		"--daemon=false",
+		"--quiet=true",
+	)
+
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+
+	if err := cmd.Start(); err != nil {
+		return nil, fmt.Errorf("start aria2: %w", err)
+	}
+
+	log.Printf("aria2 started with PID %d on port %s", cmd.Process.Pid, cfg.Aria2Port)
+	return cmd, nil
 }
 
-func stopProcess(p *os.Process) {
-	if p != nil {
-		p.Signal(syscall.SIGTERM)
-		p.Wait()
+func stopProcess(cmd *exec.Cmd) {
+	if cmd != nil && cmd.Process != nil {
+		cmd.Process.Signal(syscall.SIGTERM)
+		cmd.Wait()
 	}
 }
