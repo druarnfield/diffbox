@@ -8,12 +8,11 @@ import json
 import sys
 import os
 import traceback
-from typing import Any
 
 # Add parent directory to path for diffsynth import
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from worker.protocol import send_message, read_message, send_ready, send_progress, send_complete, send_error
+from worker.protocol import read_message, send_ready, send_complete, send_error
 
 
 def main():

@@ -2,7 +2,6 @@
 Qwen Image Edit 2511 handler with real diffsynth inference.
 """
 
-import os
 import sys
 from pathlib import Path
 from typing import Optional

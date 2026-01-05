@@ -2,7 +2,6 @@
 Wan 2.2 Image-to-Video handler with real diffsynth inference.
 """
 
-import os
 import sys
 import subprocess
 import tempfile
@@ -183,7 +182,7 @@ class I2VHandler:
                 frame.save(f"{tmpdir}/frame_{i:05d}.png")
 
             # Encode with ffmpeg
-            result = subprocess.run(
+            subprocess.run(
                 [
                     "ffmpeg", "-y",
                     "-framerate", str(fps),

@@ -505,6 +505,7 @@ diffbox/
 | I2V handler | ⚠️ Stubbed | Progress simulation, needs real inference |
 | SVI handler | ⚠️ Stubbed | Progress simulation, needs real inference |
 | Qwen handler | ⚠️ Stubbed | Progress simulation, needs real inference |
+
 | diffsynth | ✅ Vendored | Full library from infinity-mix svi_wan22 branch |
 | React app | ⚠️ Basic | Layout, pages exist, forms need work |
 | Dockerfile | ✅ Built | Single container with all services |
