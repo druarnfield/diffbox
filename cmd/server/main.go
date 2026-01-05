@@ -8,12 +8,15 @@ import (
 	"os"
 	"os/exec"
 	"os/signal"
+	"strconv"
 	"syscall"
 	"time"
 
 	"github.com/druarnfield/diffbox/internal/api"
+	"github.com/druarnfield/diffbox/internal/aria2"
 	"github.com/druarnfield/diffbox/internal/config"
 	"github.com/druarnfield/diffbox/internal/db"
+	"github.com/druarnfield/diffbox/internal/models"
 	"github.com/druarnfield/diffbox/internal/queue"
 	"github.com/druarnfield/diffbox/internal/worker"
 )
@@ -57,6 +60,28 @@ func main() {
 		log.Fatalf("Failed to start aria2: %v", err)
 	}
 	defer stopProcess(aria2Process)
+
+	// Create aria2 client and wait for it to be ready
+	aria2Port, err := strconv.Atoi(cfg.Aria2Port)
+	if err != nil {
+		log.Fatalf("Invalid aria2 port: %v", err)
+	}
+	aria2Client := aria2.NewClient("localhost", aria2Port, "")
+
+	// Wait for aria2 to be ready
+	for i := 0; i < 10; i++ {
+		if _, err := aria2Client.GetVersion(); err == nil {
+			break
+		}
+		time.Sleep(500 * time.Millisecond)
+	}
+
+	// Download missing models
+	hfToken := os.Getenv("HF_TOKEN")
+	downloader := models.NewDownloader(aria2Client, cfg.ModelsDir, hfToken)
+	if err := downloader.CheckAndDownload(); err != nil {
+		log.Fatalf("Model download failed: %v", err)
+	}
 
 	// Start Python workers
 	workerManager := worker.NewManager(cfg)
