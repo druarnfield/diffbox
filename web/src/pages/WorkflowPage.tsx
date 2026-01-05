@@ -1,169 +1,105 @@
-import { useState } from 'react'
-import { useParams } from 'react-router-dom'
+import { useState, useEffect, ReactNode } from 'react'
+import { useParams, useNavigate } from 'react-router-dom'
 import { cn } from '@/lib/utils'
+import { I2VForm } from '@/components/I2VForm'
+import { QwenForm } from '@/components/QwenForm'
+import { OutputGallery } from '@/components/OutputGallery'
+import { useWebSocket } from '@/hooks/useWebSocket'
 
-type WorkflowType = 'i2v' | 'svi' | 'qwen'
+type WorkflowType = 'i2v' | 'qwen'
 
-const workflows: { id: WorkflowType; name: string; description: string }[] = [
-  { id: 'i2v', name: 'Wan 2.2 I2V', description: 'Image to Video generation' },
-  { id: 'svi', name: 'SVI 2.0 Pro', description: 'Infinite video streaming' },
-  { id: 'qwen', name: 'Qwen Edit', description: 'Image editing & inpainting' },
+const workflows: { id: WorkflowType; name: string; description: string; icon: ReactNode }[] = [
+  {
+    id: 'i2v',
+    name: 'Wan 2.2 I2V',
+    description: 'Image to Video',
+    icon: (
+      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M7 4v16M17 4v16M3 8h4m10 0h4M3 12h18M3 16h4m10 0h4M4 20h16a1 1 0 001-1V5a1 1 0 00-1-1H4a1 1 0 00-1 1v14a1 1 0 001 1z" />
+      </svg>
+    ),
+  },
+  {
+    id: 'qwen',
+    name: 'Qwen Edit',
+    description: 'Image Editing',
+    icon: (
+      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+      </svg>
+    ),
+  },
 ]
 
 export default function WorkflowPage() {
   const { type } = useParams<{ type?: string }>()
+  const navigate = useNavigate()
   const [activeWorkflow, setActiveWorkflow] = useState<WorkflowType>(
     (type as WorkflowType) || 'i2v'
   )
 
+  // Initialize WebSocket connection
+  useWebSocket()
+
+  // Sync URL with active workflow
+  useEffect(() => {
+    if (type && type !== activeWorkflow) {
+      setActiveWorkflow(type as WorkflowType)
+    }
+  }, [type, activeWorkflow])
+
+  const handleWorkflowChange = (id: WorkflowType) => {
+    setActiveWorkflow(id)
+    navigate(`/workflow/${id}`, { replace: true })
+  }
+
   return (
     <div className="space-y-6">
       {/* Workflow selector */}
-      <div className="flex gap-2">
+      <div className="flex items-center gap-2">
         {workflows.map((workflow) => (
           <button
             key={workflow.id}
-            onClick={() => setActiveWorkflow(workflow.id)}
+            onClick={() => handleWorkflowChange(workflow.id)}
             className={cn(
-              'px-4 py-2 rounded-lg border transition-colors',
-              activeWorkflow === workflow.id
-                ? 'border-primary bg-primary/10'
-                : 'border-border hover:border-primary/50'
+              'workflow-tab flex items-center gap-3',
+              activeWorkflow === workflow.id && 'active'
             )}
           >
-            <div className="font-medium">{workflow.name}</div>
-            <div className="text-xs text-muted-foreground">
-              {workflow.description}
+            <span
+              className={cn(
+                'transition-colors',
+                activeWorkflow === workflow.id
+                  ? 'text-primary'
+                  : 'text-muted-foreground'
+              )}
+            >
+              {workflow.icon}
+            </span>
+            <div className="text-left">
+              <div className="font-medium text-sm">{workflow.name}</div>
+              <div className="text-xs text-muted-foreground">
+                {workflow.description}
+              </div>
             </div>
           </button>
         ))}
       </div>
 
-      {/* Workflow form */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Input panel */}
-        <div className="space-y-4 p-6 border rounded-lg">
-          <h2 className="text-lg font-semibold">Input</h2>
-
-          {/* Image upload */}
-          <div className="space-y-2">
-            <label className="text-sm font-medium">Input Image</label>
-            <div className="border-2 border-dashed rounded-lg p-8 text-center">
-              <p className="text-muted-foreground">
-                Drop an image here or click to upload
-              </p>
-            </div>
-          </div>
-
-          {/* Prompt */}
-          <div className="space-y-2">
-            <label className="text-sm font-medium">Prompt</label>
-            <textarea
-              className="w-full px-3 py-2 border rounded-md resize-none"
-              rows={3}
-              placeholder="Describe what you want to generate..."
-            />
-          </div>
-
-          {/* Negative prompt */}
-          <div className="space-y-2">
-            <label className="text-sm font-medium">Negative Prompt</label>
-            <textarea
-              className="w-full px-3 py-2 border rounded-md resize-none"
-              rows={2}
-              placeholder="What to avoid..."
-            />
-          </div>
-
-          {/* Basic settings */}
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Seed</label>
-              <input
-                type="number"
-                className="w-full px-3 py-2 border rounded-md"
-                placeholder="Random"
-              />
-            </div>
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Resolution</label>
-              <select className="w-full px-3 py-2 border rounded-md">
-                <option value="480x832">480 x 832</option>
-                <option value="720x1280">720 x 1280</option>
-                <option value="544x960">544 x 960</option>
-              </select>
-            </div>
-          </div>
-
-          {/* Generate button */}
-          <button className="w-full py-3 bg-primary text-primary-foreground rounded-md font-medium hover:bg-primary/90 transition-colors">
-            Generate
-          </button>
+      {/* Main content grid */}
+      <div className="grid grid-cols-1 xl:grid-cols-[1fr_320px] gap-6">
+        {/* Workflow form */}
+        <div>
+          {activeWorkflow === 'i2v' && <I2VForm />}
+          {activeWorkflow === 'qwen' && <QwenForm />}
         </div>
 
-        {/* Output panel */}
-        <div className="space-y-4 p-6 border rounded-lg">
-          <h2 className="text-lg font-semibold">Output</h2>
-          <div className="aspect-video bg-muted rounded-lg flex items-center justify-center">
-            <p className="text-muted-foreground">Output will appear here</p>
-          </div>
-
-          {/* Progress */}
-          <div className="space-y-2">
-            <div className="flex justify-between text-sm">
-              <span>Progress</span>
-              <span>0%</span>
-            </div>
-            <div className="h-2 bg-muted rounded-full overflow-hidden">
-              <div className="h-full bg-primary w-0 transition-all" />
-            </div>
-          </div>
-        </div>
+        {/* Sidebar with job history */}
+        <OutputGallery className="hidden xl:block" />
       </div>
 
-      {/* Advanced settings (collapsed) */}
-      <details className="border rounded-lg">
-        <summary className="px-6 py-4 cursor-pointer font-medium">
-          Advanced Settings
-        </summary>
-        <div className="px-6 pb-6 grid grid-cols-2 md:grid-cols-4 gap-4">
-          <div className="space-y-2">
-            <label className="text-sm font-medium">Steps</label>
-            <input
-              type="number"
-              defaultValue={50}
-              className="w-full px-3 py-2 border rounded-md"
-            />
-          </div>
-          <div className="space-y-2">
-            <label className="text-sm font-medium">CFG Scale</label>
-            <input
-              type="number"
-              defaultValue={5.0}
-              step={0.1}
-              className="w-full px-3 py-2 border rounded-md"
-            />
-          </div>
-          <div className="space-y-2">
-            <label className="text-sm font-medium">Frames</label>
-            <input
-              type="number"
-              defaultValue={81}
-              className="w-full px-3 py-2 border rounded-md"
-            />
-          </div>
-          <div className="space-y-2">
-            <label className="text-sm font-medium">Denoising</label>
-            <input
-              type="number"
-              defaultValue={1.0}
-              step={0.1}
-              max={1}
-              className="w-full px-3 py-2 border rounded-md"
-            />
-          </div>
-        </div>
-      </details>
+      {/* Mobile job history */}
+      <OutputGallery className="xl:hidden" />
     </div>
   )
 }

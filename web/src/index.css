@@ -1,47 +1,36 @@
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,100..1000;1,9..40,100..1000&family=JetBrains+Mono:wght@400;500&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 @layer base {
   :root {
-    --background: 0 0% 100%;
-    --foreground: 222.2 84% 4.9%;
-    --card: 0 0% 100%;
-    --card-foreground: 222.2 84% 4.9%;
-    --primary: 222.2 47.4% 11.2%;
-    --primary-foreground: 210 40% 98%;
-    --secondary: 210 40% 96.1%;
-    --secondary-foreground: 222.2 47.4% 11.2%;
-    --muted: 210 40% 96.1%;
-    --muted-foreground: 215.4 16.3% 46.9%;
-    --accent: 210 40% 96.1%;
-    --accent-foreground: 222.2 47.4% 11.2%;
-    --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 210 40% 98%;
-    --border: 214.3 31.8% 91.4%;
-    --input: 214.3 31.8% 91.4%;
-    --ring: 222.2 84% 4.9%;
+    --background: 220 16% 6%;
+    --foreground: 210 20% 92%;
+    --card: 220 14% 9%;
+    --card-foreground: 210 20% 92%;
+    --popover: 220 14% 9%;
+    --popover-foreground: 210 20% 92%;
+    --primary: 172 66% 50%;
+    --primary-foreground: 220 16% 6%;
+    --secondary: 220 13% 14%;
+    --secondary-foreground: 210 20% 92%;
+    --muted: 220 13% 14%;
+    --muted-foreground: 220 10% 55%;
+    --accent: 172 66% 50%;
+    --accent-foreground: 220 16% 6%;
+    --destructive: 0 62% 55%;
+    --destructive-foreground: 210 20% 98%;
+    --border: 220 13% 18%;
+    --input: 220 13% 18%;
+    --ring: 172 66% 50%;
     --radius: 0.5rem;
-  }
 
-  .dark {
-    --background: 222.2 84% 4.9%;
-    --foreground: 210 40% 98%;
-    --card: 222.2 84% 4.9%;
-    --card-foreground: 210 40% 98%;
-    --primary: 210 40% 98%;
-    --primary-foreground: 222.2 47.4% 11.2%;
-    --secondary: 217.2 32.6% 17.5%;
-    --secondary-foreground: 210 40% 98%;
-    --muted: 217.2 32.6% 17.5%;
-    --muted-foreground: 215 20.2% 65.1%;
-    --accent: 217.2 32.6% 17.5%;
-    --accent-foreground: 210 40% 98%;
-    --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 210 40% 98%;
-    --border: 217.2 32.6% 17.5%;
-    --input: 217.2 32.6% 17.5%;
-    --ring: 212.7 26.8% 83.9%;
+    /* Custom colors */
+    --success: 142 71% 45%;
+    --warning: 38 92% 50%;
+    --glow: 172 66% 50%;
   }
 }
 
@@ -49,7 +38,164 @@
   * {
     @apply border-border;
   }
+
+  html {
+    font-family: 'DM Sans', system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
   body {
     @apply bg-background text-foreground;
+    background-image:
+      radial-gradient(ellipse 80% 50% at 50% -20%, hsl(172 66% 50% / 0.08), transparent),
+      radial-gradient(ellipse 60% 40% at 100% 100%, hsl(220 60% 40% / 0.05), transparent);
+    background-attachment: fixed;
+  }
+
+  code, pre, .font-mono {
+    font-family: 'JetBrains Mono', monospace;
+  }
+}
+
+@layer components {
+  .card {
+    @apply bg-card rounded-lg border border-border;
+    box-shadow: 0 4px 24px -4px rgb(0 0 0 / 0.4);
+  }
+
+  .card-elevated {
+    @apply card;
+    box-shadow:
+      0 8px 32px -8px rgb(0 0 0 / 0.5),
+      inset 0 1px 0 0 hsl(220 13% 22%);
+  }
+
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg font-medium transition-all duration-200;
+    @apply focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-background;
+    @apply disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+
+  .btn-primary {
+    @apply btn bg-primary text-primary-foreground;
+    @apply hover:brightness-110 active:brightness-90;
+    box-shadow: 0 0 20px -4px hsl(var(--primary) / 0.4);
+  }
+
+  .btn-secondary {
+    @apply btn bg-secondary text-secondary-foreground;
+    @apply hover:bg-secondary/80;
+  }
+
+  .btn-ghost {
+    @apply btn bg-transparent text-foreground;
+    @apply hover:bg-secondary;
+  }
+
+  .input {
+    @apply w-full px-3 py-2.5 bg-secondary/50 border border-border rounded-lg;
+    @apply text-foreground placeholder:text-muted-foreground;
+    @apply focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary;
+    @apply transition-all duration-200;
+  }
+
+  .input:hover:not(:focus) {
+    @apply border-border/80 bg-secondary/70;
+  }
+
+  .label {
+    @apply block text-sm font-medium text-foreground/80 mb-1.5;
+  }
+
+  .upload-zone {
+    @apply relative border-2 border-dashed border-border rounded-lg p-8;
+    @apply flex flex-col items-center justify-center gap-3;
+    @apply transition-all duration-300 cursor-pointer;
+    @apply hover:border-primary/50 hover:bg-primary/5;
+    background-image: radial-gradient(circle at center, hsl(var(--secondary)) 1px, transparent 1px);
+    background-size: 16px 16px;
+  }
+
+  .upload-zone.dragover {
+    @apply border-primary bg-primary/10 border-solid;
+  }
+
+  .upload-zone.has-file {
+    @apply border-solid border-primary/30;
+    background-image: none;
+  }
+
+  .progress-bar {
+    @apply h-2 bg-secondary rounded-full overflow-hidden;
+  }
+
+  .progress-bar-fill {
+    @apply h-full bg-primary rounded-full transition-all duration-300;
+    box-shadow: 0 0 16px hsl(var(--primary) / 0.6);
+  }
+
+  .workflow-tab {
+    @apply px-4 py-3 rounded-lg border border-transparent;
+    @apply transition-all duration-200 cursor-pointer;
+    @apply hover:bg-secondary/50;
+  }
+
+  .workflow-tab.active {
+    @apply bg-secondary border-primary/30;
+    box-shadow: inset 0 0 0 1px hsl(var(--primary) / 0.2);
+  }
+
+  .output-preview {
+    @apply relative aspect-video bg-secondary rounded-lg overflow-hidden;
+    @apply flex items-center justify-center;
+  }
+
+  .output-preview::before {
+    content: '';
+    @apply absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent;
+    @apply opacity-0 transition-opacity duration-300;
+    pointer-events: none;
+  }
+
+  .output-preview:hover::before {
+    @apply opacity-100;
+  }
+
+  .glow-text {
+    text-shadow: 0 0 30px hsl(var(--primary) / 0.5);
+  }
+}
+
+@layer utilities {
+  .animate-pulse-glow {
+    animation: pulse-glow 2s ease-in-out infinite;
+  }
+
+  @keyframes pulse-glow {
+    0%, 100% {
+      opacity: 1;
+      box-shadow: 0 0 20px -4px hsl(var(--primary) / 0.4);
+    }
+    50% {
+      opacity: 0.9;
+      box-shadow: 0 0 30px -2px hsl(var(--primary) / 0.6);
+    }
+  }
+
+  .animate-shimmer {
+    animation: shimmer 2s linear infinite;
+    background: linear-gradient(
+      90deg,
+      hsl(var(--secondary)) 0%,
+      hsl(var(--muted)) 50%,
+      hsl(var(--secondary)) 100%
+    );
+    background-size: 200% 100%;
+  }
+
+  @keyframes shimmer {
+    0% { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
   }
 }
