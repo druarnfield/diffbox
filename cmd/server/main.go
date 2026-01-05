@@ -194,6 +194,7 @@ func startAria2(cfg *config.Config) (*exec.Cmd, error) {
 		"--rpc-listen-all=false",
 		fmt.Sprintf("--rpc-listen-port=%s", cfg.Aria2Port),
 		"--rpc-allow-origin-all",
+		"--disable-ipv6",
 		fmt.Sprintf("--max-connection-per-server=%d", cfg.Aria2MaxConnections),
 		"--split=16",
 		"--min-split-size=1M",
