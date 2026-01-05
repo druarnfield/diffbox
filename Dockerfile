@@ -1,7 +1,7 @@
 # diffbox - Self-hosted AI video/image generation
 # Single container for RunPod/Vast.ai deployment
 
-FROM nvidia/cuda:12.1-runtime-ubuntu22.04
+FROM nvidia/cuda:12.1.1-runtime-ubuntu22.04
 
 # Prevent interactive prompts
 ENV DEBIAN_FRONTEND=noninteractive
