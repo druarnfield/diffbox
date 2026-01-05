@@ -58,6 +58,11 @@ func NewClient(host string, port int, secret string) *Client {
 func (c *Client) call(method string, params ...interface{}) (json.RawMessage, error) {
 	id := fmt.Sprintf("%d", atomic.AddUint64(&c.counter, 1))
 
+	// Ensure params is always an array (aria2 requires array, not null)
+	if params == nil {
+		params = []interface{}{}
+	}
+
 	// Prepend token if secret is set
 	if c.secret != "" {
 		params = append([]interface{}{"token:" + c.secret}, params...)
