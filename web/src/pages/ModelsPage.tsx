@@ -92,14 +92,6 @@ export default function ModelsPage() {
         ))}
       </div>
 
-      {/* Empty state */}
-      {false && (
-        <div className="text-center py-12">
-          <p className="text-muted-foreground">
-            No models found. Try adjusting your search or filters.
-          </p>
-        </div>
-      )}
     </div>
   )
 }

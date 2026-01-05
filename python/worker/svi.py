@@ -2,9 +2,7 @@
 Wan 2.2 SVI 2.0 Pro (Stable Video Infinity) handler.
 """
 
-import os
 import sys
-from typing import Any
 from pathlib import Path
 
 from worker.protocol import send_progress
@@ -35,20 +33,20 @@ class SVIHandler:
         """Run SVI inference."""
         self._load_pipeline()
 
-        # Extract parameters
-        prompts = params.get("prompts", [params.get("prompt", "")])
-        negative_prompt = params.get("negative_prompt", "")
-        input_image = params.get("input_image")
-        seed = params.get("seed")
-        height = params.get("height", 480)
-        width = params.get("width", 832)
+        # Extract parameters (prefixed with _ as stub - will be used when implemented)
+        _prompts = params.get("prompts", [params.get("prompt", "")])
+        _negative_prompt = params.get("negative_prompt", "")
+        _input_image = params.get("input_image")
+        _seed = params.get("seed")
+        _height = params.get("height", 480)
+        _width = params.get("width", 832)
         num_frames = params.get("num_frames", 81)
-        num_inference_steps = params.get("num_inference_steps", 50)
-        cfg_scale = params.get("cfg_scale", 5.0)
+        _num_inference_steps = params.get("num_inference_steps", 50)
+        _cfg_scale = params.get("cfg_scale", 5.0)
         num_clips = params.get("num_clips", 10)
-        num_motion_frames = params.get("num_motion_frames", 5)
-        infinite_mode = params.get("infinite_mode", False)
-        loras = params.get("loras", [])
+        _num_motion_frames = params.get("num_motion_frames", 5)
+        _infinite_mode = params.get("infinite_mode", False)
+        _loras = params.get("loras", [])
 
         send_progress(job_id, 0.0, "Starting SVI generation...")
 

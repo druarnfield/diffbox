@@ -1,4 +1,4 @@
-import { useState, useEffect, ReactNode } from 'react'
+import { ReactNode } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { cn } from '@/lib/utils'
 import { I2VForm } from '@/components/I2VForm'
@@ -31,25 +31,21 @@ const workflows: { id: WorkflowType; name: string; description: string; icon: Re
   },
 ]
 
+function isValidWorkflow(type: string | undefined): type is WorkflowType {
+  return type === 'i2v' || type === 'qwen'
+}
+
 export default function WorkflowPage() {
   const { type } = useParams<{ type?: string }>()
   const navigate = useNavigate()
-  const [activeWorkflow, setActiveWorkflow] = useState<WorkflowType>(
-    (type as WorkflowType) || 'i2v'
-  )
+
+  // Derive active workflow from URL, defaulting to 'i2v'
+  const activeWorkflow: WorkflowType = isValidWorkflow(type) ? type : 'i2v'
 
   // Initialize WebSocket connection
   useWebSocket()
 
-  // Sync URL with active workflow
-  useEffect(() => {
-    if (type && type !== activeWorkflow) {
-      setActiveWorkflow(type as WorkflowType)
-    }
-  }, [type, activeWorkflow])
-
   const handleWorkflowChange = (id: WorkflowType) => {
-    setActiveWorkflow(id)
     navigate(`/workflow/${id}`, { replace: true })
   }
 

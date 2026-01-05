@@ -30,63 +30,6 @@ interface JobError {
 export function useWebSocket() {
   const wsRef = useRef<WebSocket | null>(null)
   const reconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const { updateJobProgress, completeJob, failJob } = useJobStore()
-
-  const connect = useCallback(() => {
-    if (wsRef.current?.readyState === WebSocket.OPEN) return
-
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
-    const wsUrl = `${protocol}//${window.location.host}/ws`
-
-    const ws = new WebSocket(wsUrl)
-    wsRef.current = ws
-
-    ws.onopen = () => {
-      console.log('WebSocket connected')
-    }
-
-    ws.onmessage = (event) => {
-      try {
-        const message: WSMessage = JSON.parse(event.data)
-        handleMessage(message)
-      } catch (err) {
-        console.error('WebSocket message parse error:', err)
-      }
-    }
-
-    ws.onclose = () => {
-      console.log('WebSocket disconnected, reconnecting...')
-      reconnectTimeoutRef.current = setTimeout(connect, 3000)
-    }
-
-    ws.onerror = (err) => {
-      console.error('WebSocket error:', err)
-    }
-  }, [])
-
-  const handleMessage = useCallback((message: WSMessage) => {
-    switch (message.type) {
-      case 'job:progress': {
-        const data = message.data as JobProgress
-        updateJobProgress(data.job_id, data.progress, data.stage, data.preview)
-        break
-      }
-      case 'job:complete': {
-        const data = message.data as JobComplete
-        completeJob(data.job_id, {
-          type: data.output.type as 'video' | 'image',
-          path: data.output.path,
-          frames: data.output.frames,
-        })
-        break
-      }
-      case 'job:error': {
-        const data = message.data as JobError
-        failJob(data.job_id, data.error)
-        break
-      }
-    }
-  }, [updateJobProgress, completeJob, failJob])
 
   const subscribe = useCallback((jobIds: string[]) => {
     if (wsRef.current?.readyState === WebSocket.OPEN) {
@@ -98,6 +41,61 @@ export function useWebSocket() {
   }, [])
 
   useEffect(() => {
+    const connect = () => {
+      if (wsRef.current?.readyState === WebSocket.OPEN) return
+
+      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
+      const wsUrl = `${protocol}//${window.location.host}/ws`
+
+      const ws = new WebSocket(wsUrl)
+      wsRef.current = ws
+
+      ws.onopen = () => {
+        console.log('WebSocket connected')
+      }
+
+      ws.onmessage = (event) => {
+        try {
+          const message: WSMessage = JSON.parse(event.data)
+          // Get latest store actions directly to avoid stale closure
+          const { updateJobProgress, completeJob, failJob } = useJobStore.getState()
+
+          switch (message.type) {
+            case 'job:progress': {
+              const data = message.data as JobProgress
+              updateJobProgress(data.job_id, data.progress, data.stage, data.preview)
+              break
+            }
+            case 'job:complete': {
+              const data = message.data as JobComplete
+              completeJob(data.job_id, {
+                type: data.output.type as 'video' | 'image',
+                path: data.output.path,
+                frames: data.output.frames,
+              })
+              break
+            }
+            case 'job:error': {
+              const data = message.data as JobError
+              failJob(data.job_id, data.error)
+              break
+            }
+          }
+        } catch (err) {
+          console.error('WebSocket message parse error:', err)
+        }
+      }
+
+      ws.onclose = () => {
+        console.log('WebSocket disconnected, reconnecting...')
+        reconnectTimeoutRef.current = setTimeout(connect, 3000)
+      }
+
+      ws.onerror = (err) => {
+        console.error('WebSocket error:', err)
+      }
+    }
+
     connect()
 
     return () => {
@@ -106,7 +104,7 @@ export function useWebSocket() {
       }
       wsRef.current?.close()
     }
-  }, [connect])
+  }, [])
 
   return { subscribe }
 }

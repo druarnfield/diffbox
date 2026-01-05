@@ -43,7 +43,7 @@ docker-run:
 
 # Install Python dependencies
 python-deps:
-	cd python && uv sync
+	cd python && uv sync --extra dev
 
 # Run Python worker directly (for testing)
 python-worker:
@@ -52,7 +52,7 @@ python-worker:
 # Run tests
 test:
 	go test -v ./...
-	cd python && uv run pytest
+	cd python && uv sync --extra dev && uv run pytest
 
 # Clean build artifacts
 clean:
