@@ -6,26 +6,29 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 
+	"github.com/druarnfield/diffbox/internal/aria2"
 	"github.com/druarnfield/diffbox/internal/config"
 	"github.com/druarnfield/diffbox/internal/db"
 	"github.com/druarnfield/diffbox/internal/queue"
 )
 
 type Server struct {
-	cfg   *config.Config
-	db    *db.DB
-	queue queue.Queue
-	hub   *WebSocketHub
+	cfg         *config.Config
+	db          *db.DB
+	queue       queue.Queue
+	hub         *WebSocketHub
+	aria2Client *aria2.Client
 }
 
 // NewRouter creates a new HTTP router and returns it along with the WebSocket hub
-func NewRouter(cfg *config.Config, database *db.DB, q queue.Queue) (http.Handler, *WebSocketHub) {
+func NewRouter(cfg *config.Config, database *db.DB, q queue.Queue, aria2Client *aria2.Client) (http.Handler, *WebSocketHub) {
 	hub := NewWebSocketHub()
 	s := &Server{
-		cfg:   cfg,
-		db:    database,
-		queue: q,
-		hub:   hub,
+		cfg:         cfg,
+		db:          database,
+		queue:       q,
+		hub:         hub,
+		aria2Client: aria2Client,
 	}
 
 	// Start WebSocket hub

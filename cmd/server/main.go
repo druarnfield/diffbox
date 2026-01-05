@@ -95,22 +95,42 @@ func main() {
 		log.Fatalf("aria2 failed to become ready after 10 attempts. Last error: %v", lastErr)
 	}
 
-	// Download missing models
-	hfToken := os.Getenv("HF_TOKEN")
-	downloader := models.NewDownloader(aria2Client, cfg.ModelsDir, hfToken)
-	if err := downloader.CheckAndDownload(); err != nil {
-		log.Fatalf("Model download failed: %v", err)
+	// Create router (start webserver early so user can see progress)
+	router, wsHub := api.NewRouter(cfg, database, q, aria2Client)
+
+	// Create server
+	server := &http.Server{
+		Addr:    ":" + cfg.Port,
+		Handler: router,
 	}
 
-	// Start Python workers
+	// Start server in background
+	go func() {
+		log.Printf("Server listening on :%s", cfg.Port)
+		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			log.Fatalf("Server error: %v", err)
+		}
+	}()
+
+	// Download missing models in background (non-blocking)
+	go func() {
+		log.Println("Starting model download check...")
+		hfToken := os.Getenv("HF_TOKEN")
+		downloader := models.NewDownloader(aria2Client, cfg.ModelsDir, hfToken)
+		if err := downloader.CheckAndDownload(); err != nil {
+			log.Printf("Model download failed: %v", err)
+			log.Println("Server will continue running, but workflows may fail without models")
+		} else {
+			log.Println("All models ready!")
+		}
+	}()
+
+	// Start Python workers (they'll wait for models when processing jobs)
 	workerManager := worker.NewManager(cfg)
 	if err := workerManager.Start(); err != nil {
 		log.Fatalf("Failed to start workers: %v", err)
 	}
 	defer workerManager.Stop()
-
-	// Create router
-	router, wsHub := api.NewRouter(cfg, database, q)
 
 	// Wire up worker callbacks to WebSocket hub
 	workerManager.SetCallbacks(
@@ -142,22 +162,9 @@ func main() {
 		},
 	)
 
-	// Create server
-	server := &http.Server{
-		Addr:    ":" + cfg.Port,
-		Handler: router,
-	}
-
 	// Graceful shutdown
 	done := make(chan os.Signal, 1)
 	signal.Notify(done, os.Interrupt, syscall.SIGINT, syscall.SIGTERM)
-
-	go func() {
-		log.Printf("Server listening on :%s", cfg.Port)
-		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			log.Fatalf("Server error: %v", err)
-		}
-	}()
 
 	<-done
 	log.Println("Shutting down...")
