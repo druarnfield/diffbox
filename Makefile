@@ -31,7 +31,7 @@ frontend:
 docker: frontend
 	@echo "Building Docker image..."
 	CGO_ENABLED=1 GOOS=linux go build -o $(BINARY_NAME) ./cmd/server
-	docker build -t $(DOCKER_IMAGE) .
+	docker build -t $(DOCKER_IMAGE):latest -t $(DOCKER_IMAGE):dev .
 
 # Run Docker container locally
 docker-run:
