@@ -127,8 +127,27 @@ func (s *Server) handleListDownloads(w http.ResponseWriter, r *http.Request) {
 		return n
 	}
 
-	// Map to track which models are actively downloading in aria2
-	hasActiveDownload := len(activeDownloads) > 0
+	// Build a map of filename -> aria2 status for quick lookup
+	aria2ByFilename := make(map[string]*struct {
+		completedLength int64
+		totalLength     int64
+		downloadSpeed   int64
+	})
+	for _, active := range activeDownloads {
+		// Get filename from aria2's Files array
+		if len(active.Files) > 0 && active.Files[0].Path != "" {
+			filename := filepath.Base(active.Files[0].Path)
+			completedLength := parseSize(active.CompletedLength)
+			totalLength := parseSize(active.TotalLength)
+			downloadSpeed := parseSize(active.DownloadSpeed)
+
+			aria2ByFilename[filename] = &struct {
+				completedLength int64
+				totalLength     int64
+				downloadSpeed   int64
+			}{completedLength, totalLength, downloadSpeed}
+		}
+	}
 
 	for _, model := range requiredModels {
 		status := DownloadStatus{
@@ -144,25 +163,26 @@ func (s *Server) handleListDownloads(w http.ResponseWriter, r *http.Request) {
 		// FIRST: Check for .aria2 control file (most reliable indicator of in-progress download)
 		if _, err := os.Stat(controlFile); err == nil {
 			status.Status = "downloading"
-			// Get partial file size if available
-			if fileInfo, err := os.Stat(filePath); err == nil {
-				status.CompletedSize = fileInfo.Size()
-				if model.Size > 0 {
-					status.Progress = float64(fileInfo.Size()) / float64(model.Size) * 100
+
+			// Try to find this download in aria2's active list by filename
+			if aria2Status, found := aria2ByFilename[model.Name]; found {
+				// Use aria2's actual progress, not file size (aria2 pre-allocates!)
+				status.CompletedSize = aria2Status.completedLength
+				status.DownloadSpeed = aria2Status.downloadSpeed
+				if aria2Status.totalLength > 0 {
+					status.Progress = float64(aria2Status.completedLength) / float64(aria2Status.totalLength) * 100
 				}
-			}
-			// If aria2 has active downloads, try to get speed
-			if hasActiveDownload {
-				for _, active := range activeDownloads {
-					if active.Status == "active" || active.Status == "waiting" {
-						speed := parseSize(active.DownloadSpeed)
-						if speed > 0 {
-							status.DownloadSpeed = speed
-							break
-						}
+			} else {
+				// If not found in active downloads, fall back to file size
+				// This can happen if aria2 just finished but hasn't removed .aria2 yet
+				if fileInfo, err := os.Stat(filePath); err == nil {
+					status.CompletedSize = fileInfo.Size()
+					if model.Size > 0 {
+						status.Progress = float64(fileInfo.Size()) / float64(model.Size) * 100
 					}
 				}
 			}
+
 			downloads = append(downloads, status)
 			continue
 		}
