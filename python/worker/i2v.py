@@ -2,7 +2,6 @@
 Wan 2.2 Image-to-Video handler with real diffsynth inference.
 """
 
-import sys
 import subprocess
 import tempfile
 import time
