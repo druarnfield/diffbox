@@ -177,6 +177,12 @@ func (m *Manager) spawnWorker(id int) (*Worker, error) {
 
 func (m *Manager) handleWorkerOutput(w *Worker) {
 	scanner := bufio.NewScanner(w.stdout)
+
+	// Increase buffer size for large JSON messages (default is 64KB)
+	const maxCapacity = 1024 * 1024 // 1MB
+	buf := make([]byte, maxCapacity)
+	scanner.Buffer(buf, maxCapacity)
+
 	for scanner.Scan() {
 		line := scanner.Text()
 
@@ -228,6 +234,13 @@ func (m *Manager) handleWorkerOutput(w *Worker) {
 
 func (m *Manager) handleWorkerLogs(w *Worker) {
 	scanner := bufio.NewScanner(w.stderr)
+
+	// Increase buffer size to handle long Python tracebacks/logs (default is 64KB)
+	// Set to 1MB to handle very long error messages
+	const maxCapacity = 1024 * 1024 // 1MB
+	buf := make([]byte, maxCapacity)
+	scanner.Buffer(buf, maxCapacity)
+
 	for scanner.Scan() {
 		line := scanner.Text()
 
