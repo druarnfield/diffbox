@@ -24,12 +24,13 @@ type CompleteCallback func(JobResult)
 type ErrorCallback func(JobResult)
 
 type Manager struct {
-	cfg              *config.Config
-	workers          []*Worker
-	mu               sync.Mutex
-	onProgress       ProgressCallback
-	onComplete       CompleteCallback
-	onError          ErrorCallback
+	cfg        *config.Config
+	workers    []*Worker
+	nextWorker int
+	mu         sync.Mutex
+	onProgress ProgressCallback
+	onComplete CompleteCallback
+	onError    ErrorCallback
 }
 
 type Worker struct {
@@ -42,9 +43,9 @@ type Worker struct {
 }
 
 type WorkerMessage struct {
-	Type    string          `json:"type"`
-	JobID   string          `json:"job_id,omitempty"`
-	Data    json.RawMessage `json:"data,omitempty"`
+	Type  string          `json:"type"`
+	JobID string          `json:"job_id,omitempty"`
+	Data  json.RawMessage `json:"data,omitempty"`
 }
 
 type JobRequest struct {
@@ -265,18 +266,24 @@ func (m *Manager) SubmitJob(job *JobRequest) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	// Find an available worker (simple round-robin for now)
+	// Find an available worker using round-robin scheduling
 	if len(m.workers) == 0 {
 		log.Printf("ERROR - Cannot submit job %s: no workers available", job.ID)
 		return fmt.Errorf("no workers available")
 	}
 
-	worker := m.workers[0] // TODO: Implement proper scheduling
-
-	// Check if worker is still running
-	if !worker.running {
-		log.Printf("ERROR - Cannot submit job %s: worker %d is not running", job.ID, worker.id)
-		return fmt.Errorf("worker %d is not running", worker.id)
+	var worker *Worker
+	for i := 0; i < len(m.workers); i++ {
+		idx := (m.nextWorker + i) % len(m.workers)
+		if m.workers[idx].running {
+			worker = m.workers[idx]
+			m.nextWorker = (idx + 1) % len(m.workers)
+			break
+		}
+	}
+	if worker == nil {
+		log.Printf("ERROR - Cannot submit job %s: no running workers", job.ID)
+		return fmt.Errorf("no running workers available")
 	}
 
 	// Log job submission with sanitized params
