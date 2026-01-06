@@ -2,7 +2,8 @@
 Qwen Image Edit 2511 handler with real diffsynth inference.
 """
 
-import sys
+import time
+import logging
 from pathlib import Path
 from typing import Optional
 import base64
@@ -16,6 +17,8 @@ from worker.protocol import send_progress
 # Import diffsynth components
 from diffsynth.pipelines.qwen_image import QwenImagePipeline
 from diffsynth.core import ModelConfig
+
+logger = logging.getLogger('worker.qwen')
 
 
 class ProgressTracker:
@@ -53,18 +56,32 @@ class QwenHandler:
         if self.pipeline is not None:
             return
 
-        print("Loading Qwen Image Edit 2511 pipeline...", file=sys.stderr)
+        logger.info("Loading Qwen Image Edit 2511 pipeline...")
         send_progress(None, 0.0, "Loading Qwen pipeline...")
+
+        # Log GPU info
+        if torch.cuda.is_available():
+            gpu_name = torch.cuda.get_device_name(0)
+            total_memory = torch.cuda.get_device_properties(0).total_memory / 1e9
+            logger.info(f"GPU: {gpu_name}")
+            logger.info(f"Total VRAM: {total_memory:.1f} GB")
+        else:
+            logger.warning("CUDA not available - will run on CPU (very slow!)")
 
         # Model paths (downloaded by aria2 on startup)
         dit_path = self.models_dir / "qwen_image_edit_2511_bf16.safetensors"
         text_encoder_path = self.models_dir / "qwen_2.5_vl_7b.safetensors"
         vae_path = self.models_dir / "qwen_image_vae.safetensors"
+        lightning_lora_path = self.models_dir / "Qwen-Image-Edit-2511-Lightning-4steps-V1.0-bf16.safetensors"
 
         # Validate models exist
         for path in [dit_path, text_encoder_path, vae_path]:
             if not path.exists():
-                raise FileNotFoundError(f"Required model not found: {path}")
+                error_msg = f"Required model not found: {path}"
+                logger.error(error_msg)
+                raise FileNotFoundError(error_msg)
+
+        logger.info("All model files found, initializing pipeline...")
 
         # Create model configs
         model_configs = [
@@ -86,21 +103,39 @@ class QwenHandler:
             ),
         )
 
-        print("Pipeline loaded.", file=sys.stderr)
+        # Load Lightning LoRA for 4-step inference if available
+        if lightning_lora_path.exists():
+            logger.info("Loading Lightning LoRA for 4-step inference...")
+            self.pipeline.load_lora(self.pipeline.dit, str(lightning_lora_path))
+            logger.info("Lightning LoRA loaded")
+        else:
+            logger.warning(f"Lightning LoRA not found at {lightning_lora_path}, using standard 30-step inference")
+
+        # Log VRAM usage after loading
+        if torch.cuda.is_available():
+            allocated = torch.cuda.memory_allocated(0) / 1e9
+            reserved = torch.cuda.memory_reserved(0) / 1e9
+            logger.info(f"Pipeline loaded - VRAM allocated: {allocated:.1f} GB, reserved: {reserved:.1f} GB")
+
         send_progress(None, 0.0, "Pipeline loaded")
 
     def run(self, job_id: str, params: dict) -> dict:
         """Run Qwen image edit inference."""
+        start_time = time.time()
+
+        logger.info(f"Starting Qwen job {job_id}")
+        logger.info(f"Parameters: {params}")
+
         self._load_pipeline()
 
-        # Extract parameters with defaults
+        # Extract parameters with defaults (optimized for Lightning LoRA)
         instruction = params.get("instruction", params.get("prompt", ""))
         edit_images_b64 = params.get("edit_images", [])
         seed = params.get("seed")
         height = params.get("height", 1024)
         width = params.get("width", 1024)
-        num_inference_steps = params.get("num_inference_steps", 30)
-        cfg_scale = params.get("cfg_scale", 4.0)
+        num_inference_steps = params.get("num_inference_steps", 4)  # Lightning LoRA uses 4 steps
+        cfg_scale = params.get("cfg_scale", 1.0)  # Lightning LoRA uses minimal CFG
 
         # Decode input images from base64 (up to 3)
         edit_images = []
@@ -110,6 +145,7 @@ class QwenHandler:
                 image_data = base64.b64decode(img_b64)
                 img = Image.open(BytesIO(image_data)).convert("RGB")
                 edit_images.append(img)
+                logger.info(f"Input image {i + 1} size: {img.size}")
 
         if not edit_images:
             raise ValueError("At least one edit_image is required for Qwen Image Edit")
@@ -117,6 +153,13 @@ class QwenHandler:
         # Set random seed
         if seed is None or seed == -1:
             seed = torch.randint(0, 2**32 - 1, (1,)).item()
+        logger.info(f"Using seed: {seed}")
+
+        # Log VRAM before inference
+        if torch.cuda.is_available():
+            free_memory = (torch.cuda.get_device_properties(0).total_memory -
+                          torch.cuda.memory_allocated(0)) / 1e9
+            logger.info(f"Free VRAM before inference: {free_memory:.1f} GB")
 
         send_progress(job_id, 0.05, "Starting inference")
 
@@ -126,6 +169,8 @@ class QwenHandler:
         # Prepare edit_image parameter
         # Single image -> Image.Image, multiple images -> list[Image.Image]
         edit_image_param = edit_images[0] if len(edit_images) == 1 else edit_images
+
+        inference_start = time.time()
 
         # Run inference
         output_image = self.pipeline(
@@ -139,6 +184,9 @@ class QwenHandler:
             edit_image_auto_resize=True,
             progress_bar_cmd=progress_tracker,
         )
+
+        inference_duration = time.time() - inference_start
+        logger.info(f"Inference completed in {inference_duration:.1f}s")
 
         send_progress(job_id, 0.95, "Saving image")
 
@@ -156,6 +204,10 @@ class QwenHandler:
         self.outputs_dir.mkdir(parents=True, exist_ok=True)
         output_path = self.outputs_dir / f"{job_id}.png"
         output_image.save(output_path)
+
+        total_duration = time.time() - start_time
+        logger.info(f"Job {job_id} total time: {total_duration:.1f}s")
+        logger.info(f"Image saved to {output_path}")
 
         send_progress(job_id, 1.0, "Complete")
 

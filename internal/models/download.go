@@ -51,6 +51,20 @@ func RequiredModels() []ModelFile {
 			Size:     254_000_000,
 			Workflow: "i2v",
 		},
+		// Wan 2.2 - Lightning LoRA High Noise (4-step distilled model)
+		{
+			Name:     "wan2.2_lightning_high_noise.safetensors",
+			URL:      hfBase + "/lightx2v/Wan2.2-Lightning/resolve/main/Wan2.2-I2V-A14B-4steps-lora-rank64-Seko-V1/high_noise_model.safetensors",
+			Size:     1_230_000_000,
+			Workflow: "i2v",
+		},
+		// Wan 2.2 - Lightning LoRA Low Noise (4-step distilled model)
+		{
+			Name:     "wan2.2_lightning_low_noise.safetensors",
+			URL:      hfBase + "/lightx2v/Wan2.2-Lightning/resolve/main/Wan2.2-I2V-A14B-4steps-lora-rank64-Seko-V1/low_noise_model.safetensors",
+			Size:     1_230_000_000,
+			Workflow: "i2v",
+		},
 		// Qwen Image Edit 2511 - DiT
 		{
 			Name:     "qwen_image_edit_2511_bf16.safetensors",
@@ -70,6 +84,13 @@ func RequiredModels() []ModelFile {
 			Name:     "qwen_image_vae.safetensors",
 			URL:      hfBase + "/Comfy-Org/Qwen-Image_ComfyUI/resolve/main/split_files/vae/qwen_image_vae.safetensors",
 			Size:     254_000_000,
+			Workflow: "qwen",
+		},
+		// Qwen - Lightning LoRA (4-step distilled model)
+		{
+			Name:     "Qwen-Image-Edit-2511-Lightning-4steps-V1.0-bf16.safetensors",
+			URL:      hfBase + "/lightx2v/Qwen-Image-Edit-2511-Lightning/resolve/main/Qwen-Image-Edit-2511-Lightning-4steps-V1.0-bf16.safetensors",
+			Size:     200_000_000, // ~200MB LoRA weights
 			Workflow: "qwen",
 		},
 	}

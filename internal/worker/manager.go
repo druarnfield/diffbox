@@ -239,10 +239,17 @@ func (m *Manager) SubmitJob(job *JobRequest) error {
 
 	// Find an available worker (simple round-robin for now)
 	if len(m.workers) == 0 {
+		log.Printf("ERROR - Cannot submit job %s: no workers available", job.ID)
 		return fmt.Errorf("no workers available")
 	}
 
 	worker := m.workers[0] // TODO: Implement proper scheduling
+
+	// Check if worker is still running
+	if !worker.running {
+		log.Printf("ERROR - Cannot submit job %s: worker %d is not running", job.ID, worker.id)
+		return fmt.Errorf("worker %d is not running", worker.id)
+	}
 
 	// Log job submission with sanitized params
 	log.Printf("Submitting job %s (type=%s, worker=%d)", job.ID, job.Type, worker.id)
@@ -256,8 +263,18 @@ func (m *Manager) SubmitJob(job *JobRequest) error {
 		Type:  "job",
 		JobID: job.ID,
 	}
-	data, _ := json.Marshal(job)
+	data, err := json.Marshal(job)
+	if err != nil {
+		log.Printf("ERROR - Failed to marshal job %s: %v", job.ID, err)
+		return fmt.Errorf("marshal job: %w", err)
+	}
 	msg.Data = data
 
-	return json.NewEncoder(worker.stdin).Encode(msg)
+	if err := json.NewEncoder(worker.stdin).Encode(msg); err != nil {
+		log.Printf("ERROR - Failed to send job %s to worker %d: %v", job.ID, worker.id, err)
+		return fmt.Errorf("send to worker: %w", err)
+	}
+
+	log.Printf("Job %s successfully sent to worker %d", job.ID, worker.id)
+	return nil
 }
