@@ -103,10 +103,18 @@ class QwenHandler:
             )
 
         # Load pipeline with from_pretrained using local model paths
+        # Use HuggingFace for tokenizer instead of ModelScope (avoids auth issues)
+        tokenizer_config = ModelConfig(
+            model_id="Qwen/Qwen2.5-VL-7B-Instruct",
+            origin_file_pattern="",  # Download tokenizer files
+            download_resource="huggingface",
+        )
+
         self.pipeline = QwenImagePipeline.from_pretrained(
             torch_dtype=torch.bfloat16,
             device="cuda",
             model_configs=model_configs,
+            tokenizer_config=tokenizer_config,
         )
 
         # Log VRAM usage after loading
