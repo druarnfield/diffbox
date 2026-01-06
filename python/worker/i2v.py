@@ -135,7 +135,9 @@ class I2VHandler:
         start_time = time.time()
 
         logger.info(f"Starting I2V job {job_id}")
-        logger.info(f"Parameters: {params}")
+        # Log params without image data (which can be megabytes of base64)
+        safe_params = {k: (f"<{len(v)} chars>" if k == "input_image" else v) for k, v in params.items()}
+        logger.info(f"Parameters: {safe_params}")
 
         self._load_pipeline()
 
