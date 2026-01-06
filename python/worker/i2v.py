@@ -142,7 +142,10 @@ class I2VHandler:
         )
 
         # Ensure prompter has tokenizer loaded (downloads from HuggingFace if needed)
-        if self.pipeline.prompter.tokenizer is None:
+        if (
+            not hasattr(self.pipeline.prompter, "tokenizer")
+            or self.pipeline.prompter.tokenizer is None
+        ):
             logger.info("Loading tokenizer from google/umt5-xxl...")
             self.pipeline.prompter.fetch_tokenizer("google/umt5-xxl")
 

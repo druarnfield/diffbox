@@ -103,10 +103,21 @@ class QwenHandler:
             )
 
         # Load pipeline with from_pretrained using local model paths
+        # Use local tokenizer downloaded by aria2 (avoids ModelScope auth issues)
+        tokenizer_path = self.models_dir / "qwen_tokenizer"
+        if not tokenizer_path.exists():
+            raise FileNotFoundError(
+                f"Tokenizer not found at {tokenizer_path}. "
+                "Ensure qwen_tokenizer files are downloaded."
+            )
+
+        tokenizer_config = ModelConfig(path=str(tokenizer_path))
+
         self.pipeline = QwenImagePipeline.from_pretrained(
             torch_dtype=torch.bfloat16,
             device="cuda",
             model_configs=model_configs,
+            tokenizer_config=tokenizer_config,
         )
 
         # Log VRAM usage after loading

@@ -1,53 +1,107 @@
-import { ReactNode } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
-import { cn } from '@/lib/utils'
-import { I2VForm } from '@/components/I2VForm'
-import { QwenForm } from '@/components/QwenForm'
-import { OutputGallery } from '@/components/OutputGallery'
-import { useWebSocket } from '@/hooks/useWebSocket'
+import { ReactNode, useEffect } from "react";
+import { useParams, useNavigate } from "react-router-dom";
+import { cn } from "@/lib/utils";
+import { I2VForm } from "@/components/I2VForm";
+import { QwenForm } from "@/components/QwenForm";
+import { OutputGallery } from "@/components/OutputGallery";
+import { useWebSocket } from "@/hooks/useWebSocket";
+import { fetchJobs } from "@/api/workflows";
+import { useJobStore } from "@/stores/jobStore";
 
-type WorkflowType = 'i2v' | 'qwen'
+type WorkflowType = "i2v" | "qwen";
 
-const workflows: { id: WorkflowType; name: string; description: string; icon: ReactNode }[] = [
+const workflows: {
+  id: WorkflowType;
+  name: string;
+  description: string;
+  icon: ReactNode;
+}[] = [
   {
-    id: 'i2v',
-    name: 'Wan 2.2 I2V',
-    description: 'Image to Video',
+    id: "i2v",
+    name: "Wan 2.2 I2V",
+    description: "Image to Video",
     icon: (
-      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M7 4v16M17 4v16M3 8h4m10 0h4M3 12h18M3 16h4m10 0h4M4 20h16a1 1 0 001-1V5a1 1 0 00-1-1H4a1 1 0 00-1 1v14a1 1 0 001 1z" />
+      <svg
+        className="w-5 h-5"
+        fill="none"
+        viewBox="0 0 24 24"
+        stroke="currentColor"
+      >
+        <path
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          strokeWidth={1.5}
+          d="M7 4v16M17 4v16M3 8h4m10 0h4M3 12h18M3 16h4m10 0h4M4 20h16a1 1 0 001-1V5a1 1 0 00-1-1H4a1 1 0 00-1 1v14a1 1 0 001 1z"
+        />
       </svg>
     ),
   },
   {
-    id: 'qwen',
-    name: 'Qwen Edit',
-    description: 'Image Editing',
+    id: "qwen",
+    name: "Qwen Edit",
+    description: "Image Editing",
     icon: (
-      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+      <svg
+        className="w-5 h-5"
+        fill="none"
+        viewBox="0 0 24 24"
+        stroke="currentColor"
+      >
+        <path
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          strokeWidth={1.5}
+          d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
+        />
       </svg>
     ),
   },
-]
+];
 
 function isValidWorkflow(type: string | undefined): type is WorkflowType {
-  return type === 'i2v' || type === 'qwen'
+  return type === "i2v" || type === "qwen";
 }
 
 export default function WorkflowPage() {
-  const { type } = useParams<{ type?: string }>()
-  const navigate = useNavigate()
+  const { type } = useParams<{ type?: string }>();
+  const navigate = useNavigate();
 
   // Derive active workflow from URL, defaulting to 'i2v'
-  const activeWorkflow: WorkflowType = isValidWorkflow(type) ? type : 'i2v'
+  const activeWorkflow: WorkflowType = isValidWorkflow(type) ? type : "i2v";
 
   // Initialize WebSocket connection
-  useWebSocket()
+  useWebSocket();
+
+  // Fetch persisted jobs on mount
+  const { setJobs } = useJobStore();
+
+  useEffect(() => {
+    fetchJobs()
+      .then((apiJobs) => {
+        // Convert API jobs to store format
+        const jobs = apiJobs.map((j) => ({
+          id: j.id,
+          type: j.type as "i2v" | "qwen",
+          status: j.status as "pending" | "running" | "completed" | "failed",
+          progress: j.progress,
+          stage: j.stage,
+          params: j.params,
+          output: j.output
+            ? { type: j.output.type as "video" | "image", path: j.output.path }
+            : undefined,
+          error: j.error,
+          createdAt: new Date(j.created_at),
+        }));
+        setJobs(jobs);
+      })
+      .catch((err) => {
+        console.error("Failed to fetch jobs:", err);
+      });
+  }, [setJobs]);
 
   const handleWorkflowChange = (id: WorkflowType) => {
-    navigate(`/workflow/${id}`, { replace: true })
-  }
+    navigate(`/workflow/${id}`, { replace: true });
+  };
 
   return (
     <div className="space-y-6">
@@ -58,16 +112,16 @@ export default function WorkflowPage() {
             key={workflow.id}
             onClick={() => handleWorkflowChange(workflow.id)}
             className={cn(
-              'workflow-tab flex items-center gap-3',
-              activeWorkflow === workflow.id && 'active'
+              "workflow-tab flex items-center gap-3",
+              activeWorkflow === workflow.id && "active",
             )}
           >
             <span
               className={cn(
-                'transition-colors',
+                "transition-colors",
                 activeWorkflow === workflow.id
-                  ? 'text-primary'
-                  : 'text-muted-foreground'
+                  ? "text-primary"
+                  : "text-muted-foreground",
               )}
             >
               {workflow.icon}
@@ -86,8 +140,8 @@ export default function WorkflowPage() {
       <div className="grid grid-cols-1 xl:grid-cols-[1fr_320px] gap-6">
         {/* Workflow form */}
         <div>
-          {activeWorkflow === 'i2v' && <I2VForm />}
-          {activeWorkflow === 'qwen' && <QwenForm />}
+          {activeWorkflow === "i2v" && <I2VForm />}
+          {activeWorkflow === "qwen" && <QwenForm />}
         </div>
 
         {/* Sidebar with job history */}
@@ -97,5 +151,5 @@ export default function WorkflowPage() {
       {/* Mobile job history */}
       <OutputGallery className="xl:hidden" />
     </div>
-  )
+  );
 }

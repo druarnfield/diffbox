@@ -167,6 +167,47 @@ func (db *DB) FailJob(id string, errorMsg string) error {
 	return err
 }
 
+func (db *DB) ClearJobs() error {
+	_, err := db.conn.Exec(`DELETE FROM jobs`)
+	return err
+}
+
+func (db *DB) ListJobs(limit int) ([]*Job, error) {
+	rows, err := db.conn.Query(
+		`SELECT id, type, status, progress, stage, params, output, error, created_at, updated_at
+		FROM jobs ORDER BY created_at DESC LIMIT ?`,
+		limit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var jobs []*Job
+	for rows.Next() {
+		job := &Job{}
+		var stage, output, errMsg sql.NullString
+		err := rows.Scan(
+			&job.ID, &job.Type, &job.Status, &job.Progress,
+			&stage, &job.Params, &output, &errMsg,
+			&job.CreatedAt, &job.UpdatedAt,
+		)
+		if err != nil {
+			return nil, err
+		}
+		job.Stage = stage.String
+		job.Output = output.String
+		job.Error = errMsg.String
+		jobs = append(jobs, job)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return jobs, nil
+}
+
 // Config methods
 
 func (db *DB) GetConfig(key string) (string, error) {

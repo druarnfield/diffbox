@@ -7,8 +7,8 @@ import (
 func TestRequiredModels(t *testing.T) {
 	models := RequiredModels()
 
-	if len(models) != 10 {
-		t.Errorf("expected 10 required models, got %d", len(models))
+	if len(models) != 14 {
+		t.Errorf("expected 14 required models, got %d", len(models))
 	}
 
 	// Check that all models have valid data
@@ -41,6 +41,10 @@ func TestRequiredModels(t *testing.T) {
 		"qwen_2.5_vl_7b.safetensors",
 		"qwen_image_vae.safetensors",
 		"Qwen-Image-Edit-2511-Lightning-4steps-V1.0-bf16.safetensors",
+		"qwen_tokenizer/tokenizer.json",
+		"qwen_tokenizer/vocab.json",
+		"qwen_tokenizer/merges.txt",
+		"qwen_tokenizer/tokenizer_config.json",
 	}
 
 	for _, expected := range expectedModels {
@@ -89,6 +93,7 @@ func TestModelFileURL(t *testing.T) {
 	validPrefixes := []string{
 		"https://huggingface.co/Comfy-Org/",
 		"https://huggingface.co/lightx2v/",
+		"https://huggingface.co/Qwen/", // For tokenizer files
 	}
 
 	// Verify all URLs are valid HuggingFace URLs
@@ -115,9 +120,12 @@ func TestModelFileURL(t *testing.T) {
 			t.Errorf("model %s URL should start with one of %v, got %s", model.Name, validPrefixes, model.URL)
 		}
 
-		// URLs should end with .safetensors
-		if len(model.URL) < 12 || model.URL[len(model.URL)-12:] != ".safetensors" {
-			t.Errorf("model %s URL should end with .safetensors, got %s", model.Name, model.URL)
+		// Model weight files should end with .safetensors, tokenizer files have other extensions
+		isTokenizerFile := len(model.Name) >= 14 && model.Name[:14] == "qwen_tokenizer"
+		if !isTokenizerFile {
+			if len(model.URL) < 12 || model.URL[len(model.URL)-12:] != ".safetensors" {
+				t.Errorf("model %s URL should end with .safetensors, got %s", model.Name, model.URL)
+			}
 		}
 	}
 }
