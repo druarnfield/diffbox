@@ -21,21 +21,23 @@ RUN ln -s /usr/bin/redis-server /usr/local/bin/valkey-server
 # Install uv (Python package manager)
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 
-# Create app directory
-WORKDIR /app
-
-# Copy Go binary (built externally)
-COPY diffbox /usr/local/bin/diffbox
-
-# Copy Python worker
-COPY python /app/python
-
-# Install Python dependencies
+# Create app directory and set working directory
 WORKDIR /app/python
+
+# Copy Python dependency files first (for layer caching)
+COPY python/pyproject.toml python/uv.lock ./
+
+# Install Python dependencies (this layer is cached unless deps change)
 RUN uv sync --frozen
 
-# Copy frontend static files
+# Copy Python worker code (separate layer from deps for better caching)
+COPY python/ ./
+
+# Copy frontend static files (separate layer, changes less frequently than Go binary)
 COPY web/dist /app/static
+
+# Copy Go binary last (changes most frequently, but COPY is fast)
+COPY diffbox /usr/local/bin/diffbox
 
 # Create directories for runtime data
 RUN mkdir -p /data /models /outputs
