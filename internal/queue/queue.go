@@ -3,6 +3,7 @@ package queue
 import (
 	"context"
 	"encoding/json"
+	"log"
 
 	"github.com/redis/go-redis/v9"
 )
@@ -82,16 +83,19 @@ func (q *RedisQueue) Consume(stream string, group string, consumer string, handl
 
 				var data map[string]interface{}
 				if err := json.Unmarshal([]byte(dataStr), &data); err != nil {
+					log.Printf("ERROR - Failed to unmarshal job data from queue: %v", err)
 					continue
 				}
 
 				if err := handler(message.ID, data); err != nil {
+					log.Printf("ERROR - Failed to process job %s: %v", data["id"], err)
 					// TODO: Handle error (retry, dead letter, etc.)
 					continue
 				}
 
 				// Acknowledge message
 				q.client.XAck(q.ctx, stream.Stream, group, message.ID)
+				log.Printf("Job %s acknowledged and removed from queue", data["id"])
 			}
 		}
 	}
