@@ -156,10 +156,15 @@ func main() {
 		}
 	}()
 
-	// Wire up worker callbacks to WebSocket hub
+	// Wire up worker callbacks to WebSocket hub and database
 	workerManager.SetCallbacks(
 		// Progress callback
 		func(progress worker.ProgressUpdate) {
+			// Update database
+			if err := database.UpdateJobProgress(progress.JobID, progress.Progress, progress.Stage); err != nil {
+				log.Printf("Failed to update job progress in DB: %v", err)
+			}
+			// Broadcast to WebSocket
 			wsHub.BroadcastJobProgress(api.JobProgress{
 				JobID:    progress.JobID,
 				Progress: progress.Progress,
@@ -169,6 +174,11 @@ func main() {
 		},
 		// Complete callback
 		func(result worker.JobResult) {
+			// Update database
+			if err := database.CompleteJob(result.JobID, result.Output); err != nil {
+				log.Printf("Failed to complete job in DB: %v", err)
+			}
+			// Broadcast to WebSocket
 			wsHub.BroadcastJobComplete(api.JobComplete{
 				JobID: result.JobID,
 				Output: api.JobOutput{
@@ -179,6 +189,11 @@ func main() {
 		},
 		// Error callback
 		func(result worker.JobResult) {
+			// Update database
+			if err := database.FailJob(result.JobID, result.Error); err != nil {
+				log.Printf("Failed to mark job as failed in DB: %v", err)
+			}
+			// Broadcast to WebSocket
 			wsHub.BroadcastJobError(api.JobError{
 				JobID: result.JobID,
 				Error: result.Error,
