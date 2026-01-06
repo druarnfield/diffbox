@@ -155,7 +155,26 @@ func main() {
 			}
 
 			log.Printf("Dispatching job %s from queue to worker", jobID)
-			return workerManager.SubmitJob(job)
+			err := workerManager.SubmitJob(job)
+			if err != nil {
+				log.Printf("Job %s dispatch failed, retrying in 1s: %v", jobID, err)
+				time.Sleep(1 * time.Second)
+				err = workerManager.SubmitJob(job)
+				if err != nil {
+					log.Printf("Job %s dispatch retry failed, marking as failed: %v", jobID, err)
+					// Mark job as failed in database
+					if dbErr := database.FailJob(jobID, fmt.Sprintf("dispatch failed: %v", err)); dbErr != nil {
+						log.Printf("Failed to mark job %s as failed in DB: %v", jobID, dbErr)
+					}
+					// Broadcast failure to WebSocket
+					wsHub.BroadcastJobError(api.JobError{
+						JobID: jobID,
+						Error: fmt.Sprintf("Failed to dispatch job: %v", err),
+					})
+					return nil // Don't return error to avoid queue retry loops
+				}
+			}
+			return nil
 		})
 		if err != nil {
 			log.Printf("Queue consumer error: %v", err)
