@@ -75,6 +75,8 @@ class I2VHandler:
         low_noise_path = self.models_dir / "wan2.2_i2v_low_noise_14B_fp16.safetensors"
         text_encoder_path = self.models_dir / "umt5_xxl_fp16.safetensors"
         vae_path = self.models_dir / "wan_2.1_vae.safetensors"
+        lightning_high_noise_path = self.models_dir / "wan2.2_lightning_high_noise.safetensors"
+        lightning_low_noise_path = self.models_dir / "wan2.2_lightning_low_noise.safetensors"
 
         # Validate models exist
         for path in [high_noise_path, low_noise_path, text_encoder_path, vae_path]:
@@ -100,6 +102,15 @@ class I2VHandler:
             model_configs=model_configs,
         )
 
+        # Load Lightning LoRAs for 4-step inference if available
+        if lightning_high_noise_path.exists() and lightning_low_noise_path.exists():
+            logger.info("Loading Lightning LoRAs for 4-step inference...")
+            self.pipeline.load_lora(self.pipeline.dit_high_noise, str(lightning_high_noise_path))
+            self.pipeline.load_lora(self.pipeline.dit_low_noise, str(lightning_low_noise_path))
+            logger.info("Lightning LoRAs loaded")
+        else:
+            logger.warning(f"Lightning LoRAs not found, using standard 50-step inference")
+
         # Log VRAM usage after loading
         if torch.cuda.is_available():
             allocated = torch.cuda.memory_allocated(0) / 1e9
@@ -117,7 +128,7 @@ class I2VHandler:
 
         self._load_pipeline()
 
-        # Extract parameters with defaults
+        # Extract parameters with defaults (optimized for Lightning LoRA)
         prompt = params.get("prompt", "")
         negative_prompt = params.get("negative_prompt", "")
         input_image_b64 = params.get("input_image")
@@ -125,8 +136,8 @@ class I2VHandler:
         height = params.get("height", 480)
         width = params.get("width", 832)
         num_frames = params.get("num_frames", 81)
-        num_inference_steps = params.get("num_inference_steps", 50)
-        cfg_scale = params.get("cfg_scale", 5.0)
+        num_inference_steps = params.get("num_inference_steps", 4)  # Lightning LoRA uses 4 steps
+        cfg_scale = params.get("cfg_scale", 1.0)  # Lightning LoRA uses minimal CFG
         denoising_strength = params.get("denoising_strength", 1.0)
         tiled = params.get("tiled", True)
         tile_size = params.get("tile_size", (30, 52))
