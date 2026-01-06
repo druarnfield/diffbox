@@ -11,17 +11,12 @@ from typing import Optional
 
 import torch
 
-# Import diffsynth components
-from diffsynth import ModelManager
+# Import diffsynth components - use new API with ModelConfig
+from diffsynth.pipelines.qwen_image import QwenImagePipeline
+from diffsynth.utils import ModelConfig
 from PIL import Image
 
 from worker.protocol import send_progress
-
-try:
-    from diffsynth.pipelines.qwen_image import QwenImagePipeline
-except ImportError:
-    # Fallback if the import path changes
-    from diffsynth import QwenImagePipeline
 
 logger = logging.getLogger("worker.qwen")
 
@@ -55,7 +50,6 @@ class QwenHandler:
         self.models_dir = Path(models_dir)
         self.outputs_dir = Path(outputs_dir)
         self.pipeline: Optional[QwenImagePipeline] = None
-        self.model_manager: Optional[ModelManager] = None
 
     def _load_pipeline(self):
         """Lazy load the Qwen Image Edit pipeline."""
@@ -90,42 +84,30 @@ class QwenHandler:
                 logger.error(error_msg)
                 raise FileNotFoundError(error_msg)
 
-        logger.info("All model files found, initializing ModelManager...")
+        logger.info("All model files found, loading pipeline with from_pretrained...")
 
-        # Initialize ModelManager with file paths
-        file_paths = [
-            str(dit_path),
-            str(text_encoder_path),
-            str(vae_path),
+        # Use new DiffSynth API with ModelConfig for local files
+        model_configs = [
+            ModelConfig(path=str(dit_path)),
+            ModelConfig(path=str(text_encoder_path)),
+            ModelConfig(path=str(vae_path)),
         ]
 
-        self.model_manager = ModelManager(
-            torch_dtype=torch.bfloat16, device="cuda", file_path_list=file_paths
-        )
-
-        # Initialize pipeline
-        self.pipeline = QwenImagePipeline(device="cuda", torch_dtype=torch.bfloat16)
-
-        # Load models into pipeline
-        logger.info("Loading models into pipeline...")
-        self.model_manager.load_models(file_paths)
-
-        # Fetch and assign models to pipeline
-        self.pipeline.text_encoder = self.model_manager.fetch_model("text_encoder")
-        self.pipeline.dit = self.model_manager.fetch_model("dit")
-        self.pipeline.vae = self.model_manager.fetch_model("vae")
-
-        # Load Lightning LoRA for 4-step inference if available
+        # Add Lightning LoRA if available
         if lightning_lora_path.exists():
-            logger.info("Loading Lightning LoRA for 4-step inference...")
-            self.model_manager.load_lora(
-                file_path=str(lightning_lora_path), lora_alpha=1.0
-            )
-            logger.info("Lightning LoRA loaded")
+            logger.info("Including Lightning LoRA for 4-step inference...")
+            model_configs.append(ModelConfig(path=str(lightning_lora_path)))
         else:
             logger.warning(
-                f"Lightning LoRA not found at {lightning_lora_path}, using standard 30-step inference"
+                f"Lightning LoRA not found at {lightning_lora_path}, using standard inference"
             )
+
+        # Load pipeline with from_pretrained using local model paths
+        self.pipeline = QwenImagePipeline.from_pretrained(
+            torch_dtype=torch.bfloat16,
+            device="cuda",
+            model_configs=model_configs,
+        )
 
         # Log VRAM usage after loading
         if torch.cuda.is_available():
