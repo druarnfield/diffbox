@@ -37,6 +37,12 @@ func main() {
 	}
 	defer database.Close()
 
+	// Clear stale jobs from previous session (ephemeral job policy)
+	if err := database.ClearJobs(); err != nil {
+		log.Printf("Warning: failed to clear stale jobs: %v", err)
+	}
+	log.Println("Cleared stale jobs from database")
+
 	// Start Valkey (Redis)
 	valkeyProcess, err := startValkey(cfg)
 	if err != nil {
