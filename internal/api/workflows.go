@@ -2,6 +2,7 @@ package api
 
 import (
 	"encoding/json"
+	"log"
 	"net/http"
 
 	"github.com/google/uuid"
@@ -63,9 +64,13 @@ type JobResponse struct {
 func (s *Server) handleI2VSubmit(w http.ResponseWriter, r *http.Request) {
 	var req I2VRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		log.Printf("I2V: Failed to decode request: %v", err)
 		http.Error(w, "Invalid request body", http.StatusBadRequest)
 		return
 	}
+
+	// Log request details (without full image data)
+	log.Printf("I2V: Received request - prompt=%q, image_len=%d bytes", req.Prompt, len(req.InputImage))
 
 	// Set defaults
 	if req.Height == 0 {
@@ -99,10 +104,12 @@ func (s *Server) handleI2VSubmit(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := s.queue.Enqueue("jobs", job); err != nil {
+		log.Printf("I2V: Failed to enqueue job %s: %v", jobID, err)
 		http.Error(w, "Failed to queue job", http.StatusInternalServerError)
 		return
 	}
 
+	log.Printf("I2V: Job %s queued successfully", jobID)
 	// Return job ID
 	json.NewEncoder(w).Encode(JobResponse{
 		ID:     jobID,

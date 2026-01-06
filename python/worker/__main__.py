@@ -84,7 +84,11 @@ def main():
                 except Exception as e:
                     error_msg = f"{type(e).__name__}: {str(e)}"
                     logger.error(f"Job {job_id} failed: {error_msg}")
-                    logger.error(f"Job {job_id} parameters: {params}")
+                    # Log params without large base64 image data
+                    safe_params = {k: (f"<{len(v) if isinstance(v, (str, list)) else v} chars/items>"
+                                      if k in ("input_image", "edit_images") else v)
+                                  for k, v in params.items()}
+                    logger.error(f"Job {job_id} parameters: {safe_params}")
                     logger.error("Traceback:", exc_info=True)
                     send_error(job_id, error_msg)
 
