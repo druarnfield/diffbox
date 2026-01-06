@@ -84,10 +84,10 @@ func (s *Server) handleI2VSubmit(w http.ResponseWriter, r *http.Request) {
 		req.NumFrames = 81
 	}
 	if req.NumInferenceSteps == 0 {
-		req.NumInferenceSteps = 50
+		req.NumInferenceSteps = 8
 	}
 	if req.CFGScale == 0 {
-		req.CFGScale = 5.0
+		req.CFGScale = 1.0
 	}
 	if req.DenoisingStrength == 0 {
 		req.DenoisingStrength = 1.0
@@ -156,10 +156,10 @@ func (s *Server) handleSVISubmit(w http.ResponseWriter, r *http.Request) {
 		req.NumFrames = 81
 	}
 	if req.NumInferenceSteps == 0 {
-		req.NumInferenceSteps = 50
+		req.NumInferenceSteps = 8
 	}
 	if req.CFGScale == 0 {
-		req.CFGScale = 5.0
+		req.CFGScale = 1.0
 	}
 	if req.NumClips == 0 {
 		req.NumClips = 10
@@ -227,10 +227,10 @@ func (s *Server) handleQwenSubmit(w http.ResponseWriter, r *http.Request) {
 		req.Width = 1024
 	}
 	if req.NumInferenceSteps == 0 {
-		req.NumInferenceSteps = 30
+		req.NumInferenceSteps = 4
 	}
 	if req.CFGScale == 0 {
-		req.CFGScale = 4.0
+		req.CFGScale = 1.0
 	}
 	if req.DenoisingStrength == 0 {
 		req.DenoisingStrength = 1.0
