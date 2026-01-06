@@ -93,6 +93,31 @@ func RequiredModels() []ModelFile {
 			Size:     200_000_000, // ~200MB LoRA weights
 			Workflow: "qwen",
 		},
+		// Qwen - Tokenizer files (for Qwen2Tokenizer)
+		{
+			Name:     "qwen_tokenizer/tokenizer.json",
+			URL:      hfBase + "/Qwen/Qwen2.5-VL-7B-Instruct/resolve/main/tokenizer.json",
+			Size:     7_030_000, // ~7MB
+			Workflow: "qwen",
+		},
+		{
+			Name:     "qwen_tokenizer/vocab.json",
+			URL:      hfBase + "/Qwen/Qwen2.5-VL-7B-Instruct/resolve/main/vocab.json",
+			Size:     2_780_000, // ~2.8MB
+			Workflow: "qwen",
+		},
+		{
+			Name:     "qwen_tokenizer/merges.txt",
+			URL:      hfBase + "/Qwen/Qwen2.5-VL-7B-Instruct/resolve/main/merges.txt",
+			Size:     1_670_000, // ~1.7MB
+			Workflow: "qwen",
+		},
+		{
+			Name:     "qwen_tokenizer/tokenizer_config.json",
+			URL:      hfBase + "/Qwen/Qwen2.5-VL-7B-Instruct/resolve/main/tokenizer_config.json",
+			Size:     6_000, // ~6KB
+			Workflow: "qwen",
+		},
 	}
 }
 

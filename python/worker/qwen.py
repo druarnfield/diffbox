@@ -103,12 +103,15 @@ class QwenHandler:
             )
 
         # Load pipeline with from_pretrained using local model paths
-        # Use HuggingFace for tokenizer instead of ModelScope (avoids auth issues)
-        tokenizer_config = ModelConfig(
-            model_id="Qwen/Qwen2.5-VL-7B-Instruct",
-            origin_file_pattern="",  # Download tokenizer files
-            download_resource="huggingface",
-        )
+        # Use local tokenizer downloaded by aria2 (avoids ModelScope auth issues)
+        tokenizer_path = self.models_dir / "qwen_tokenizer"
+        if not tokenizer_path.exists():
+            raise FileNotFoundError(
+                f"Tokenizer not found at {tokenizer_path}. "
+                "Ensure qwen_tokenizer files are downloaded."
+            )
+
+        tokenizer_config = ModelConfig(path=str(tokenizer_path))
 
         self.pipeline = QwenImagePipeline.from_pretrained(
             torch_dtype=torch.bfloat16,
