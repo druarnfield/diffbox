@@ -109,7 +109,7 @@ class I2VHandler:
             self.pipeline.load_lora(self.pipeline.dit_low_noise, str(lightning_low_noise_path))
             logger.info("Lightning LoRAs loaded")
         else:
-            logger.warning(f"Lightning LoRAs not found, using standard 50-step inference")
+            logger.warning("Lightning LoRAs not found, using standard 50-step inference")
 
         # Log VRAM usage after loading
         if torch.cuda.is_available():
