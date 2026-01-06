@@ -132,6 +132,30 @@ func main() {
 	}
 	defer workerManager.Stop()
 
+	// Start queue consumer to dispatch jobs to workers
+	go func() {
+		log.Println("Starting queue consumer...")
+		err := q.Consume("jobs", "workers", "dispatcher", func(id string, data map[string]interface{}) error {
+			// Parse job data
+			jobID, _ := data["id"].(string)
+			jobType, _ := data["type"].(string)
+			params, _ := data["params"].(map[string]interface{})
+
+			// Submit to worker
+			job := &worker.JobRequest{
+				ID:     jobID,
+				Type:   jobType,
+				Params: params,
+			}
+
+			log.Printf("Dispatching job %s from queue to worker", jobID)
+			return workerManager.SubmitJob(job)
+		})
+		if err != nil {
+			log.Printf("Queue consumer error: %v", err)
+		}
+	}()
+
 	// Wire up worker callbacks to WebSocket hub
 	workerManager.SetCallbacks(
 		// Progress callback

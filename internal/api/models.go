@@ -7,7 +7,6 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/druarnfield/diffbox/internal/aria2"
 	"github.com/druarnfield/diffbox/internal/models"
 	"github.com/go-chi/chi/v5"
 )
@@ -122,12 +121,14 @@ func (s *Server) handleListDownloads(w http.ResponseWriter, r *http.Request) {
 	// Get all active downloads from aria2
 	activeDownloads, _ := s.aria2Client.TellActive()
 
-	// Create map of active downloads by filename
-	activeByName := make(map[string]*aria2.DownloadStatus)
-	for i := range activeDownloads {
-		// Extract filename from download (aria2 doesn't store it directly)
-		activeByName[activeDownloads[i].GID] = &activeDownloads[i]
+	parseSize := func(s string) int64 {
+		var n int64
+		_, _ = fmt.Sscanf(s, "%d", &n)
+		return n
 	}
+
+	// Map to track which models are actively downloading in aria2
+	hasActiveDownload := len(activeDownloads) > 0
 
 	for _, model := range requiredModels {
 		status := DownloadStatus{
@@ -137,56 +138,57 @@ func (s *Server) handleListDownloads(w http.ResponseWriter, r *http.Request) {
 			Workflow:  model.Workflow,
 		}
 
-		// Check if file exists locally
 		filePath := filepath.Join(s.cfg.ModelsDir, model.Name)
-		fileInfo, err := os.Stat(filePath)
+		controlFile := filePath + ".aria2" // aria2 creates this file during download
 
+		// FIRST: Check for .aria2 control file (most reliable indicator of in-progress download)
+		if _, err := os.Stat(controlFile); err == nil {
+			status.Status = "downloading"
+			// Get partial file size if available
+			if fileInfo, err := os.Stat(filePath); err == nil {
+				status.CompletedSize = fileInfo.Size()
+				if model.Size > 0 {
+					status.Progress = float64(fileInfo.Size()) / float64(model.Size) * 100
+				}
+			}
+			// If aria2 has active downloads, try to get speed
+			if hasActiveDownload {
+				for _, active := range activeDownloads {
+					if active.Status == "active" || active.Status == "waiting" {
+						speed := parseSize(active.DownloadSpeed)
+						if speed > 0 {
+							status.DownloadSpeed = speed
+							break
+						}
+					}
+				}
+			}
+			downloads = append(downloads, status)
+			continue
+		}
+
+		// SECOND: Check if complete file exists locally (no .aria2 file = download finished)
+		fileInfo, err := os.Stat(filePath)
+		if err == nil && fileInfo.Size() >= int64(float64(model.Size)*0.99) {
+			status.Status = "complete"
+			status.Progress = 100.0
+			status.CompletedSize = fileInfo.Size()
+			downloads = append(downloads, status)
+			continue
+		}
+
+		// LAST: File doesn't exist or is incomplete with no active download
 		if err == nil {
-			// File exists - check if complete
-			if fileInfo.Size() >= int64(float64(model.Size)*0.99) {
-				status.Status = "complete"
-				status.Progress = 100.0
-				status.CompletedSize = fileInfo.Size()
-			} else {
-				// File exists but incomplete - might be downloading
-				status.Status = "downloading"
-				status.CompletedSize = fileInfo.Size()
+			// Partial file exists but no .aria2 control file
+			status.Status = "downloading"
+			status.CompletedSize = fileInfo.Size()
+			if model.Size > 0 {
 				status.Progress = float64(fileInfo.Size()) / float64(model.Size) * 100
 			}
 		} else {
-			// File doesn't exist - check if downloading
-			found := false
-			for _, active := range activeDownloads {
-				// Match by checking if the download is for this model
-				// (we'd need to track GID to filename mapping better)
-				if active.Status == "active" || active.Status == "waiting" {
-					found = true
-					parseSize := func(s string) int64 {
-						var n int64
-						_, _ = fmt.Sscanf(s, "%d", &n)
-						return n
-					}
-
-					total := parseSize(active.TotalLength)
-					completed := parseSize(active.CompletedLength)
-					speed := parseSize(active.DownloadSpeed)
-
-					status.Status = active.Status
-					status.TotalSize = total
-					status.CompletedSize = completed
-					status.DownloadSpeed = speed
-					if total > 0 {
-						status.Progress = float64(completed) / float64(total) * 100
-					}
-					break
-				}
-			}
-
-			if !found {
-				status.Status = "missing"
-				status.Progress = 0
-				status.CompletedSize = 0
-			}
+			status.Status = "missing"
+			status.Progress = 0
+			status.CompletedSize = 0
 		}
 
 		downloads = append(downloads, status)
