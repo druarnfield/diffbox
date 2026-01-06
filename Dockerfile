@@ -48,6 +48,9 @@ ENV DIFFBOX_OUTPUTS_DIR=/outputs
 ENV DIFFBOX_STATIC_DIR=/app/static
 ENV DIFFBOX_PYTHON_PATH=/app/python
 
+# Declare persistent volumes (for RunPod/Vast.ai)
+VOLUME ["/data", "/models", "/outputs"]
+
 # Expose port
 EXPOSE 8080
 

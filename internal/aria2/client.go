@@ -35,14 +35,21 @@ type RPCError struct {
 	Message string `json:"message"`
 }
 
-type DownloadStatus struct {
-	GID             string `json:"gid"`
-	Status          string `json:"status"`
-	TotalLength     string `json:"totalLength"`
+type DownloadFile struct {
+	Path            string `json:"path"`
+	Length          string `json:"length"`
 	CompletedLength string `json:"completedLength"`
-	DownloadSpeed   string `json:"downloadSpeed"`
-	ErrorCode       string `json:"errorCode,omitempty"`
-	ErrorMessage    string `json:"errorMessage,omitempty"`
+}
+
+type DownloadStatus struct {
+	GID             string         `json:"gid"`
+	Status          string         `json:"status"`
+	TotalLength     string         `json:"totalLength"`
+	CompletedLength string         `json:"completedLength"`
+	DownloadSpeed   string         `json:"downloadSpeed"`
+	Files           []DownloadFile `json:"files"`
+	ErrorCode       string         `json:"errorCode,omitempty"`
+	ErrorMessage    string         `json:"errorMessage,omitempty"`
 }
 
 func NewClient(host string, port int, secret string) *Client {
