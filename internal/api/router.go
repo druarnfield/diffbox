@@ -88,11 +88,31 @@ func NewRouter(cfg *config.Config, database *db.DB, q queue.Queue, aria2Client *
 	// WebSocket
 	r.Get("/ws", s.handleWebSocket)
 
-	// Static files (frontend)
-	fileServer := http.FileServer(http.Dir(cfg.StaticDir))
-	r.Handle("/*", http.StripPrefix("/", fileServer))
+	// Static files (frontend) with SPA fallback
+	r.Get("/*", s.handleSPA)
 
 	return r, hub
+}
+
+// handleSPA serves static files and falls back to index.html for SPA routing
+func (s *Server) handleSPA(w http.ResponseWriter, r *http.Request) {
+	path := r.URL.Path
+
+	// Serve static files if they exist
+	fullPath := s.cfg.StaticDir + path
+	info, err := http.Dir(s.cfg.StaticDir).Open(path)
+	if err == nil {
+		defer info.Close()
+		// Check if it's a file (not a directory)
+		stat, err := info.Stat()
+		if err == nil && !stat.IsDir() {
+			http.ServeFile(w, r, fullPath)
+			return
+		}
+	}
+
+	// For any other route, serve index.html (SPA routing)
+	http.ServeFile(w, r, s.cfg.StaticDir+"/index.html")
 }
 
 func corsMiddleware(next http.Handler) http.Handler {
