@@ -73,6 +73,16 @@ func (s *Server) handleI2VSubmit(w http.ResponseWriter, r *http.Request) {
 	// Log request details (without full image data)
 	log.Printf("I2V: Received request - prompt=%q, image_len=%d bytes", req.Prompt, len(req.InputImage))
 
+	// Validate input
+	if len(req.InputImage) > 14_000_000 {
+		http.Error(w, "Image too large (max 10MB)", http.StatusBadRequest)
+		return
+	}
+	if len(req.Prompt) > 500 {
+		http.Error(w, "Prompt too long (max 500 characters)", http.StatusBadRequest)
+		return
+	}
+
 	// Set defaults
 	if req.Height == 0 {
 		req.Height = 480
@@ -143,6 +153,22 @@ func (s *Server) handleSVISubmit(w http.ResponseWriter, r *http.Request) {
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, "Invalid request body", http.StatusBadRequest)
 		return
+	}
+
+	// Validate input
+	if len(req.InputImage) > 14_000_000 {
+		http.Error(w, "Image too large (max 10MB)", http.StatusBadRequest)
+		return
+	}
+	if len(req.Prompt) > 500 {
+		http.Error(w, "Prompt too long (max 500 characters)", http.StatusBadRequest)
+		return
+	}
+	for _, prompt := range req.Prompts {
+		if len(prompt) > 500 {
+			http.Error(w, "Prompt too long (max 500 characters)", http.StatusBadRequest)
+			return
+		}
 	}
 
 	// Set defaults
@@ -216,6 +242,18 @@ func (s *Server) handleQwenSubmit(w http.ResponseWriter, r *http.Request) {
 	var req QwenRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	// Validate input
+	for _, img := range req.EditImages {
+		if len(img) > 14_000_000 {
+			http.Error(w, "Image too large (max 10MB)", http.StatusBadRequest)
+			return
+		}
+	}
+	if len(req.Prompt) > 500 {
+		http.Error(w, "Prompt too long (max 500 characters)", http.StatusBadRequest)
 		return
 	}
 
