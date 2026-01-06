@@ -5,27 +5,28 @@ import (
 	"log"
 	"net/http"
 
+	"github.com/druarnfield/diffbox/internal/db"
 	"github.com/google/uuid"
 )
 
 // I2V Request
 type I2VRequest struct {
-	Prompt             string   `json:"prompt"`
-	NegativePrompt     string   `json:"negative_prompt"`
-	InputImage         string   `json:"input_image"` // base64 or path
-	Seed               *int     `json:"seed"`
-	Height             int      `json:"height"`
-	Width              int      `json:"width"`
-	NumFrames          int      `json:"num_frames"`
-	NumInferenceSteps  int      `json:"num_inference_steps"`
-	CFGScale           float64  `json:"cfg_scale"`
-	DenoisingStrength  float64  `json:"denoising_strength"`
-	CameraDirection    string   `json:"camera_direction"`
-	CameraSpeed        float64  `json:"camera_speed"`
-	MotionBucketID     *int     `json:"motion_bucket_id"`
-	LoRAs              []string `json:"loras"`
-	Tiled              bool     `json:"tiled"`
-	TileSize           []int    `json:"tile_size"`
+	Prompt            string   `json:"prompt"`
+	NegativePrompt    string   `json:"negative_prompt"`
+	InputImage        string   `json:"input_image"` // base64 or path
+	Seed              *int     `json:"seed"`
+	Height            int      `json:"height"`
+	Width             int      `json:"width"`
+	NumFrames         int      `json:"num_frames"`
+	NumInferenceSteps int      `json:"num_inference_steps"`
+	CFGScale          float64  `json:"cfg_scale"`
+	DenoisingStrength float64  `json:"denoising_strength"`
+	CameraDirection   string   `json:"camera_direction"`
+	CameraSpeed       float64  `json:"camera_speed"`
+	MotionBucketID    *int     `json:"motion_bucket_id"`
+	LoRAs             []string `json:"loras"`
+	Tiled             bool     `json:"tiled"`
+	TileSize          []int    `json:"tile_size"`
 }
 
 // SVI Request
@@ -41,7 +42,7 @@ type SVIRequest struct {
 type QwenRequest struct {
 	Prompt            string   `json:"prompt"`
 	NegativePrompt    string   `json:"negative_prompt"`
-	EditImages        []string `json:"edit_images"` // base64 or paths
+	EditImages        []string `json:"edit_images"`  // base64 or paths
 	InpaintMask       string   `json:"inpaint_mask"` // base64
 	Seed              *int     `json:"seed"`
 	Height            int      `json:"height"`
@@ -95,12 +96,32 @@ func (s *Server) handleI2VSubmit(w http.ResponseWriter, r *http.Request) {
 	// Create job
 	jobID := uuid.New().String()
 
+	// Persist job to database
+	paramsJSON, err := json.Marshal(req)
+	if err != nil {
+		log.Printf("I2V: Failed to serialize params for job %s: %v", jobID, err)
+		http.Error(w, "Failed to serialize params", http.StatusInternalServerError)
+		return
+	}
+
+	dbJob := &db.Job{
+		ID:     jobID,
+		Type:   "i2v",
+		Status: "pending",
+		Params: string(paramsJSON),
+	}
+	if err := s.db.CreateJob(dbJob); err != nil {
+		log.Printf("I2V: Failed to persist job %s: %v", jobID, err)
+		http.Error(w, "Failed to create job", http.StatusInternalServerError)
+		return
+	}
+
 	// Queue job
 	job := map[string]interface{}{
-		"id":       jobID,
-		"type":     "i2v",
-		"params":   req,
-		"status":   "pending",
+		"id":     jobID,
+		"type":   "i2v",
+		"params": req,
+		"status": "pending",
 	}
 
 	if err := s.queue.Enqueue("jobs", job); err != nil {
@@ -150,18 +171,41 @@ func (s *Server) handleSVISubmit(w http.ResponseWriter, r *http.Request) {
 	// Create job
 	jobID := uuid.New().String()
 
+	// Persist job to database
+	paramsJSON, err := json.Marshal(req)
+	if err != nil {
+		log.Printf("SVI: Failed to serialize params for job %s: %v", jobID, err)
+		http.Error(w, "Failed to serialize params", http.StatusInternalServerError)
+		return
+	}
+
+	dbJob := &db.Job{
+		ID:     jobID,
+		Type:   "svi",
+		Status: "pending",
+		Params: string(paramsJSON),
+	}
+	if err := s.db.CreateJob(dbJob); err != nil {
+		log.Printf("SVI: Failed to persist job %s: %v", jobID, err)
+		http.Error(w, "Failed to create job", http.StatusInternalServerError)
+		return
+	}
+
+	// Queue job
 	job := map[string]interface{}{
-		"id":       jobID,
-		"type":     "svi",
-		"params":   req,
-		"status":   "pending",
+		"id":     jobID,
+		"type":   "svi",
+		"params": req,
+		"status": "pending",
 	}
 
 	if err := s.queue.Enqueue("jobs", job); err != nil {
+		log.Printf("SVI: Failed to enqueue job %s: %v", jobID, err)
 		http.Error(w, "Failed to queue job", http.StatusInternalServerError)
 		return
 	}
 
+	log.Printf("SVI: Job %s queued successfully", jobID)
 	json.NewEncoder(w).Encode(JobResponse{
 		ID:     jobID,
 		Status: "pending",
@@ -198,18 +242,41 @@ func (s *Server) handleQwenSubmit(w http.ResponseWriter, r *http.Request) {
 	// Create job
 	jobID := uuid.New().String()
 
+	// Persist job to database
+	paramsJSON, err := json.Marshal(req)
+	if err != nil {
+		log.Printf("Qwen: Failed to serialize params for job %s: %v", jobID, err)
+		http.Error(w, "Failed to serialize params", http.StatusInternalServerError)
+		return
+	}
+
+	dbJob := &db.Job{
+		ID:     jobID,
+		Type:   "qwen",
+		Status: "pending",
+		Params: string(paramsJSON),
+	}
+	if err := s.db.CreateJob(dbJob); err != nil {
+		log.Printf("Qwen: Failed to persist job %s: %v", jobID, err)
+		http.Error(w, "Failed to create job", http.StatusInternalServerError)
+		return
+	}
+
+	// Queue job
 	job := map[string]interface{}{
-		"id":       jobID,
-		"type":     "qwen",
-		"params":   req,
-		"status":   "pending",
+		"id":     jobID,
+		"type":   "qwen",
+		"params": req,
+		"status": "pending",
 	}
 
 	if err := s.queue.Enqueue("jobs", job); err != nil {
+		log.Printf("Qwen: Failed to enqueue job %s: %v", jobID, err)
 		http.Error(w, "Failed to queue job", http.StatusInternalServerError)
 		return
 	}
 
+	log.Printf("Qwen: Job %s queued successfully", jobID)
 	json.NewEncoder(w).Encode(JobResponse{
 		ID:     jobID,
 		Status: "pending",
