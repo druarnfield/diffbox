@@ -15,6 +15,9 @@ import torch
 
 # Import diffsynth components
 from diffsynth import ModelManager, WanVideoPipeline
+from diffsynth.models.wan_video_dit import WanModel
+from diffsynth.models.wan_video_text_encoder import WanTextEncoder
+from diffsynth.models.wan_video_vae import WanVideoVAE
 from PIL import Image
 
 from worker.protocol import send_progress
@@ -97,26 +100,33 @@ class I2VHandler:
             device="cuda",
         )
 
-        # Load models with explicit model_names mapping
+        # Load models with explicit model_names and model_classes
+        # Using load_model_from_single_file to bypass auto-detection which may fail
         # WanVideoPipeline.fetch_models expects: wan_video_text_encoder, wan_video_dit, wan_video_vae
         logger.info("Loading models into ModelManager...")
 
         # Load text encoder (wan_video_text_encoder)
-        self.model_manager.load_models(
-            [str(text_encoder_path)],
+        self.model_manager.load_model_from_single_file(
+            file_path=str(text_encoder_path),
             model_names=["wan_video_text_encoder"],
+            model_classes=[WanTextEncoder],
+            model_resource="civitai",
         )
 
         # Load DiT - both high and low noise variants together (wan_video_dit)
-        self.model_manager.load_models(
-            [[str(high_noise_path), str(low_noise_path)]],
+        self.model_manager.load_model_from_single_file(
+            file_path=[str(high_noise_path), str(low_noise_path)],
             model_names=["wan_video_dit"],
+            model_classes=[WanModel],
+            model_resource="civitai",
         )
 
         # Load VAE (wan_video_vae)
-        self.model_manager.load_models(
-            [str(vae_path)],
+        self.model_manager.load_model_from_single_file(
+            file_path=str(vae_path),
             model_names=["wan_video_vae"],
+            model_classes=[WanVideoVAE],
+            model_resource="civitai",
         )
 
         # Load Lightning LoRAs if available

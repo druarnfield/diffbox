@@ -11,9 +11,12 @@ from typing import Optional
 
 import torch
 
-# Import diffsynth components - use new API with ModelConfig
+# Import diffsynth components
+from diffsynth import ModelManager
+from diffsynth.models.qwen_image_dit import QwenImageDiT
+from diffsynth.models.qwen_image_text_encoder import QwenImageTextEncoder
+from diffsynth.models.qwen_image_vae import QwenImageVAE
 from diffsynth.pipelines.qwen_image import QwenImagePipeline
-from diffsynth.utils import ModelConfig
 from PIL import Image
 
 from worker.protocol import send_progress
@@ -50,6 +53,7 @@ class QwenHandler:
         self.models_dir = Path(models_dir)
         self.outputs_dir = Path(outputs_dir)
         self.pipeline: Optional[QwenImagePipeline] = None
+        self.model_manager: Optional[ModelManager] = None
 
     def _load_pipeline(self):
         """Lazy load the Qwen Image Edit pipeline."""
@@ -84,26 +88,63 @@ class QwenHandler:
                 logger.error(error_msg)
                 raise FileNotFoundError(error_msg)
 
-        logger.info("All model files found, loading pipeline with from_pretrained...")
+        logger.info("All model files found, initializing ModelManager...")
 
-        # Use new DiffSynth API with ModelConfig for local files
-        model_configs = [
-            ModelConfig(path=str(dit_path)),
-            ModelConfig(path=str(text_encoder_path)),
-            ModelConfig(path=str(vae_path)),
-        ]
+        # Initialize ModelManager
+        self.model_manager = ModelManager(
+            torch_dtype=torch.bfloat16,
+            device="cuda",
+        )
 
-        # Add Lightning LoRA if available
+        # Load models with explicit model_names and model_classes
+        # Using load_model_from_single_file to bypass auto-detection which may fail
+        logger.info("Loading models into ModelManager...")
+
+        # Load DiT (qwen_image_dit)
+        self.model_manager.load_model_from_single_file(
+            file_path=str(dit_path),
+            model_names=["qwen_image_dit"],
+            model_classes=[QwenImageDiT],
+            model_resource="civitai",
+        )
+
+        # Load text encoder (qwen_image_text_encoder)
+        self.model_manager.load_model_from_single_file(
+            file_path=str(text_encoder_path),
+            model_names=["qwen_image_text_encoder"],
+            model_classes=[QwenImageTextEncoder],
+            model_resource="diffusers",
+        )
+
+        # Load VAE (qwen_image_vae)
+        self.model_manager.load_model_from_single_file(
+            file_path=str(vae_path),
+            model_names=["qwen_image_vae"],
+            model_classes=[QwenImageVAE],
+            model_resource="diffusers",
+        )
+
+        # Load Lightning LoRA if available
         if lightning_lora_path.exists():
-            logger.info("Including Lightning LoRA for 4-step inference...")
-            model_configs.append(ModelConfig(path=str(lightning_lora_path)))
+            logger.info("Loading Lightning LoRA for 4-step inference...")
+            self.model_manager.load_lora(
+                file_path=str(lightning_lora_path), lora_alpha=1.0
+            )
         else:
             logger.warning(
                 f"Lightning LoRA not found at {lightning_lora_path}, using standard inference"
             )
 
-        # Load pipeline with from_pretrained using local model paths
-        # Use local tokenizer downloaded by aria2 (avoids ModelScope auth issues)
+        # Create pipeline and manually assign models
+        logger.info("Creating QwenImagePipeline...")
+        self.pipeline = QwenImagePipeline(device="cuda", torch_dtype=torch.bfloat16)
+        self.pipeline.dit = self.model_manager.fetch_model("qwen_image_dit")
+        self.pipeline.text_encoder = self.model_manager.fetch_model(
+            "qwen_image_text_encoder"
+        )
+        self.pipeline.vae = self.model_manager.fetch_model("qwen_image_vae")
+
+        # Load tokenizer from local path (downloaded by aria2)
         tokenizer_path = self.models_dir / "qwen_tokenizer"
         if not tokenizer_path.exists():
             raise FileNotFoundError(
@@ -111,14 +152,9 @@ class QwenHandler:
                 "Ensure qwen_tokenizer files are downloaded."
             )
 
-        tokenizer_config = ModelConfig(path=str(tokenizer_path))
+        from transformers import Qwen2Tokenizer
 
-        self.pipeline = QwenImagePipeline.from_pretrained(
-            torch_dtype=torch.bfloat16,
-            device="cuda",
-            model_configs=model_configs,
-            tokenizer_config=tokenizer_config,
-        )
+        self.pipeline.tokenizer = Qwen2Tokenizer.from_pretrained(str(tokenizer_path))
 
         # Log VRAM usage after loading
         if torch.cuda.is_available():
