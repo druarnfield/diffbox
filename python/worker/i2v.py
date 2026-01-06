@@ -17,8 +17,7 @@ from PIL import Image
 from worker.protocol import send_progress
 
 # Import diffsynth components
-from diffsynth.pipelines.wan_video import WanVideoPipeline
-from diffsynth.core import ModelConfig
+from diffsynth import WanVideoPipeline, ModelManager
 
 logger = logging.getLogger('worker.i2v')
 
@@ -52,6 +51,7 @@ class I2VHandler:
         self.models_dir = Path(models_dir)
         self.outputs_dir = Path(outputs_dir)
         self.pipeline: Optional[WanVideoPipeline] = None
+        self.model_manager: Optional[ModelManager] = None
 
     def _load_pipeline(self):
         """Lazy load the Wan 2.2 I2V pipeline."""
@@ -85,28 +85,39 @@ class I2VHandler:
                 logger.error(error_msg)
                 raise FileNotFoundError(error_msg)
 
-        logger.info("All model files found, initializing pipeline...")
+        logger.info("All model files found, initializing ModelManager...")
 
-        # Create model configs
-        model_configs = [
-            ModelConfig(path=str(high_noise_path)),
-            ModelConfig(path=str(low_noise_path)),
-            ModelConfig(path=str(text_encoder_path)),
-            ModelConfig(path=str(vae_path)),
+        # Initialize ModelManager with file paths
+        file_paths = [
+            str(high_noise_path),
+            str(low_noise_path),
+            str(text_encoder_path),
+            str(vae_path),
         ]
 
-        # Initialize pipeline
-        self.pipeline = WanVideoPipeline.from_pretrained(
+        self.model_manager = ModelManager(
             torch_dtype=torch.bfloat16,
             device="cuda",
-            model_configs=model_configs,
+            file_path_list=file_paths
         )
+
+        # Initialize pipeline
+        self.pipeline = WanVideoPipeline(device="cuda", torch_dtype=torch.bfloat16)
+
+        # Load models into pipeline
+        logger.info("Loading models into pipeline...")
+        self.model_manager.load_models(file_paths)
+
+        # Fetch and assign models to pipeline
+        self.pipeline.text_encoder = self.model_manager.fetch_model("text_encoder")
+        self.pipeline.dit = self.model_manager.fetch_model("dit")
+        self.pipeline.vae = self.model_manager.fetch_model("vae")
 
         # Load Lightning LoRAs for 4-step inference if available
         if lightning_high_noise_path.exists() and lightning_low_noise_path.exists():
             logger.info("Loading Lightning LoRAs for 4-step inference...")
-            self.pipeline.load_lora(self.pipeline.dit_high_noise, str(lightning_high_noise_path))
-            self.pipeline.load_lora(self.pipeline.dit_low_noise, str(lightning_low_noise_path))
+            self.model_manager.load_lora(file_path=str(lightning_high_noise_path), lora_alpha=1.0)
+            self.model_manager.load_lora(file_path=str(lightning_low_noise_path), lora_alpha=1.0)
             logger.info("Lightning LoRAs loaded")
         else:
             logger.warning("Lightning LoRAs not found, using standard 50-step inference")

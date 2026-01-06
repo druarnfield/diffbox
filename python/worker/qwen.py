@@ -15,8 +15,12 @@ from PIL import Image
 from worker.protocol import send_progress
 
 # Import diffsynth components
-from diffsynth.pipelines.qwen_image import QwenImagePipeline
-from diffsynth.core import ModelConfig
+from diffsynth import ModelManager
+try:
+    from diffsynth.pipelines.qwen_image import QwenImagePipeline
+except ImportError:
+    # Fallback if the import path changes
+    from diffsynth import QwenImagePipeline
 
 logger = logging.getLogger('worker.qwen')
 
@@ -50,6 +54,7 @@ class QwenHandler:
         self.models_dir = Path(models_dir)
         self.outputs_dir = Path(outputs_dir)
         self.pipeline: Optional[QwenImagePipeline] = None
+        self.model_manager: Optional[ModelManager] = None
 
     def _load_pipeline(self):
         """Lazy load the Qwen Image Edit pipeline."""
@@ -81,32 +86,42 @@ class QwenHandler:
                 logger.error(error_msg)
                 raise FileNotFoundError(error_msg)
 
-        logger.info("All model files found, initializing pipeline...")
+        logger.info("All model files found, initializing ModelManager...")
 
-        # Create model configs
-        model_configs = [
-            ModelConfig(path=str(dit_path)),
-            ModelConfig(path=str(text_encoder_path)),
-            ModelConfig(path=str(vae_path)),
+        # Initialize ModelManager with file paths
+        file_paths = [
+            str(dit_path),
+            str(text_encoder_path),
+            str(vae_path),
         ]
 
-        # Initialize pipeline
-        # Note: tokenizer/processor are loaded from HF for Qwen2VL
-        self.pipeline = QwenImagePipeline.from_pretrained(
+        self.model_manager = ModelManager(
             torch_dtype=torch.bfloat16,
             device="cuda",
-            model_configs=model_configs,
-            # Use Qwen2VL processor for image editing
-            processor_config=ModelConfig(
-                model_id="Qwen/Qwen2-VL-7B-Instruct",
-                download_source="huggingface",
-            ),
+            file_path_list=file_paths
         )
+
+        # Initialize pipeline with tokenizer path for Qwen2VL
+        # The official DiffSynth expects tokenizer path for Qwen models
+        self.pipeline = QwenImagePipeline(
+            device="cuda",
+            torch_dtype=torch.bfloat16,
+            tokenizer_path="Qwen/Qwen2-VL-7B-Instruct"
+        )
+
+        # Load models into pipeline
+        logger.info("Loading models into pipeline...")
+        self.model_manager.load_models(file_paths)
+
+        # Fetch and assign models to pipeline
+        self.pipeline.text_encoder = self.model_manager.fetch_model("text_encoder")
+        self.pipeline.dit = self.model_manager.fetch_model("dit")
+        self.pipeline.vae = self.model_manager.fetch_model("vae")
 
         # Load Lightning LoRA for 4-step inference if available
         if lightning_lora_path.exists():
             logger.info("Loading Lightning LoRA for 4-step inference...")
-            self.pipeline.load_lora(self.pipeline.dit, str(lightning_lora_path))
+            self.model_manager.load_lora(file_path=str(lightning_lora_path), lora_alpha=1.0)
             logger.info("Lightning LoRA loaded")
         else:
             logger.warning(f"Lightning LoRA not found at {lightning_lora_path}, using standard 30-step inference")
