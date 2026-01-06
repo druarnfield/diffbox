@@ -1,5 +1,4 @@
-import { useState, useCallback } from "react";
-import { ImageUpload } from "./ImageUpload";
+import { useState, useCallback, useRef } from "react";
 import { Progress } from "./Progress";
 import { submitQwen } from "@/api/workflows";
 import { useJobStore } from "@/stores/jobStore";
@@ -19,11 +18,179 @@ interface FormState {
 }
 
 const RESOLUTIONS = [
-  { value: "1024x1024", label: "1024 x 1024 (Square)" },
-  { value: "1328x1328", label: "1328 x 1328 (Square HD)" },
-  { value: "1024x768", label: "1024 x 768 (4:3)" },
-  { value: "768x1024", label: "768 x 1024 (3:4)" },
+  { value: "1024x1024", label: "1024×1024", aspect: "Square" },
+  { value: "1328x1328", label: "1328×1328", aspect: "Square HD" },
+  { value: "1024x768", label: "1024×768", aspect: "4:3" },
+  { value: "768x1024", label: "768×1024", aspect: "3:4" },
 ];
+
+// Compact image upload slot component
+function ImageSlot({
+  file,
+  index,
+  isPrimary,
+  onSelect,
+  onRemove,
+}: {
+  file: File | null;
+  index: number;
+  isPrimary?: boolean;
+  onSelect: (file: File) => void;
+  onRemove: () => void;
+}) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [preview, setPreview] = useState<string | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
+
+  const handleFile = useCallback(
+    (f: File) => {
+      onSelect(f);
+      const reader = new FileReader();
+      reader.onload = (e) => setPreview(e.target?.result as string);
+      reader.readAsDataURL(f);
+    },
+    [onSelect],
+  );
+
+  const handleDrop = useCallback(
+    (e: React.DragEvent) => {
+      e.preventDefault();
+      setIsDragging(false);
+      const f = e.dataTransfer.files[0];
+      if (f?.type.startsWith("image/")) handleFile(f);
+    },
+    [handleFile],
+  );
+
+  const handleRemove = useCallback(
+    (e: React.MouseEvent) => {
+      e.stopPropagation();
+      onRemove();
+      setPreview(null);
+      if (inputRef.current) inputRef.current.value = "";
+    },
+    [onRemove],
+  );
+
+  // Sync preview with external file state
+  const displayPreview = file ? preview : null;
+
+  return (
+    <div
+      onClick={() => inputRef.current?.click()}
+      onDrop={handleDrop}
+      onDragOver={(e) => {
+        e.preventDefault();
+        setIsDragging(true);
+      }}
+      onDragLeave={() => setIsDragging(false)}
+      className={cn(
+        "relative rounded-lg border-2 border-dashed transition-all cursor-pointer overflow-hidden group",
+        isPrimary ? "aspect-square" : "aspect-square",
+        isDragging
+          ? "border-primary bg-primary/10 border-solid"
+          : displayPreview
+            ? "border-primary/30 border-solid"
+            : "border-border/60 hover:border-primary/40 hover:bg-primary/5",
+      )}
+    >
+      <input
+        ref={inputRef}
+        type="file"
+        accept="image/*"
+        onChange={(e) => {
+          const f = e.target.files?.[0];
+          if (f) handleFile(f);
+        }}
+        className="hidden"
+      />
+
+      {displayPreview ? (
+        <>
+          <img
+            src={displayPreview}
+            alt=""
+            className="w-full h-full object-cover"
+          />
+          <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-colors" />
+          <button
+            onClick={handleRemove}
+            className="absolute top-2 right-2 p-1.5 bg-black/60 rounded-md text-white/80 hover:text-white hover:bg-black/80 transition-all opacity-0 group-hover:opacity-100"
+          >
+            <svg
+              className="w-3.5 h-3.5"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+              strokeWidth={2}
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                d="M6 18L18 6M6 6l12 12"
+              />
+            </svg>
+          </button>
+          {isPrimary && (
+            <div className="absolute bottom-2 left-2 px-2 py-0.5 bg-black/60 rounded text-[10px] text-white/80 font-medium uppercase tracking-wide">
+              Primary
+            </div>
+          )}
+        </>
+      ) : (
+        <div className="absolute inset-0 flex flex-col items-center justify-center p-3">
+          {isPrimary ? (
+            <>
+              <div className="w-10 h-10 rounded-full bg-secondary/80 flex items-center justify-center mb-2">
+                <svg
+                  className="w-5 h-5 text-muted-foreground"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                  strokeWidth={1.5}
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    d="M12 4v16m8-8H4"
+                  />
+                </svg>
+              </div>
+              <span className="text-xs text-muted-foreground text-center">
+                Drop image or click
+              </span>
+            </>
+          ) : (
+            <div className="w-8 h-8 rounded-full bg-secondary/50 flex items-center justify-center">
+              <svg
+                className="w-4 h-4 text-muted-foreground/60"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+                strokeWidth={1.5}
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="M12 4v16m8-8H4"
+                />
+              </svg>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Slot number indicator */}
+      {!isPrimary && !displayPreview && (
+        <div className="absolute bottom-1.5 right-1.5 w-5 h-5 rounded bg-secondary/80 flex items-center justify-center">
+          <span className="text-[10px] text-muted-foreground font-medium">
+            {index + 1}
+          </span>
+        </div>
+      )}
+    </div>
+  );
+}
 
 export function QwenForm({ className }: QwenFormProps) {
   const { addJob, jobs, activeJobId } = useJobStore();
@@ -120,43 +287,71 @@ export function QwenForm({ className }: QwenFormProps) {
           Image Edit
         </h2>
 
-        <div className="space-y-2">
-          <label className="label flex items-center justify-between">
-            <span>Input Images</span>
-            <span className="text-xs text-muted-foreground">
-              {imageCount}/3 images
+        {/* Redesigned image upload - primary + secondary slots */}
+        <div className="space-y-3">
+          <div className="flex items-center justify-between">
+            <label className="label mb-0">Reference Images</label>
+            <span
+              className={cn(
+                "text-xs px-2 py-0.5 rounded-full transition-colors",
+                imageCount > 0
+                  ? "bg-primary/10 text-primary"
+                  : "bg-secondary text-muted-foreground",
+              )}
+            >
+              {imageCount}/3
             </span>
-          </label>
-          <div className="grid grid-cols-3 gap-3">
-            {[0, 1, 2].map((index) => (
-              <ImageUpload
-                key={index}
-                value={form.images[index]}
-                onChange={(file) => updateImage(index, file)}
-                label=""
-                className="min-h-0"
-              />
-            ))}
           </div>
+
+          {/* Image slots in asymmetric grid */}
+          <div className="grid grid-cols-[1fr_auto] gap-3">
+            {/* Primary large slot */}
+            <ImageSlot
+              file={form.images[0]}
+              index={0}
+              isPrimary
+              onSelect={(f) => updateImage(0, f)}
+              onRemove={() => updateImage(0, null)}
+            />
+
+            {/* Secondary slots stacked */}
+            <div className="flex flex-col gap-3 w-24">
+              <ImageSlot
+                file={form.images[1]}
+                index={1}
+                onSelect={(f) => updateImage(1, f)}
+                onRemove={() => updateImage(1, null)}
+              />
+              <ImageSlot
+                file={form.images[2]}
+                index={2}
+                onSelect={(f) => updateImage(2, f)}
+                onRemove={() => updateImage(2, null)}
+              />
+            </div>
+          </div>
+
           <p className="text-xs text-muted-foreground">
-            Upload 1-3 reference images. Multiple images let you combine
-            elements.
+            Add up to 3 images to edit or combine. Primary image has most
+            influence.
           </p>
         </div>
 
+        {/* Instruction */}
         <div className="space-y-2">
-          <label className="label">Instruction</label>
+          <label className="label">Edit Instruction</label>
           <textarea
             value={form.instruction}
             onChange={(e) =>
               setForm((s) => ({ ...s, instruction: e.target.value }))
             }
             className="input resize-none"
-            rows={4}
-            placeholder="Describe how you want to edit or combine the images..."
+            rows={3}
+            placeholder='Describe how to edit: "change background to sunset", "remove the person", "combine into one scene"...'
           />
         </div>
 
+        {/* Settings row */}
         <div className="grid grid-cols-2 gap-4">
           <div className="space-y-2">
             <label className="label">Seed</label>
@@ -169,7 +364,7 @@ export function QwenForm({ className }: QwenFormProps) {
             />
           </div>
           <div className="space-y-2">
-            <label className="label">Resolution</label>
+            <label className="label">Output Size</label>
             <select
               value={form.resolution}
               onChange={(e) =>
@@ -179,7 +374,7 @@ export function QwenForm({ className }: QwenFormProps) {
             >
               {RESOLUTIONS.map((r) => (
                 <option key={r.value} value={r.value}>
-                  {r.label}
+                  {r.label} ({r.aspect})
                 </option>
               ))}
             </select>
@@ -202,9 +397,9 @@ export function QwenForm({ className }: QwenFormProps) {
                 d="M9 5l7 7-7 7"
               />
             </svg>
-            Advanced Settings
+            Advanced
           </summary>
-          <div className="grid grid-cols-2 gap-4 mt-4">
+          <div className="grid grid-cols-2 gap-4 mt-4 pt-4 border-t border-border/50">
             <div className="space-y-2">
               <label className="label">Steps</label>
               <input
@@ -276,7 +471,7 @@ export function QwenForm({ className }: QwenFormProps) {
                   d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
                 />
               </svg>
-              Submitting...
+              Generating...
             </>
           ) : (
             <>
@@ -290,10 +485,10 @@ export function QwenForm({ className }: QwenFormProps) {
                   strokeLinecap="round"
                   strokeLinejoin="round"
                   strokeWidth={2}
-                  d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"
+                  d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z"
                 />
               </svg>
-              Generate Image
+              Generate Edit
             </>
           )}
         </button>
@@ -322,9 +517,24 @@ export function QwenForm({ className }: QwenFormProps) {
               <p className="text-sm text-muted-foreground">{activeJob.stage}</p>
             </div>
           ) : (
-            <p className="text-muted-foreground text-sm">
-              Output will appear here
-            </p>
+            <div className="text-center">
+              <svg
+                className="w-12 h-12 mx-auto text-muted-foreground/30 mb-3"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+                strokeWidth={1}
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"
+                />
+              </svg>
+              <p className="text-muted-foreground text-sm">
+                Output will appear here
+              </p>
+            </div>
           )}
         </div>
 
