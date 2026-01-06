@@ -91,35 +91,37 @@ class I2VHandler:
 
         logger.info("All model files found, initializing ModelManager...")
 
-        # Initialize ModelManager with file paths
-        file_paths = [
-            str(high_noise_path),
-            str(low_noise_path),
-            str(text_encoder_path),
-            str(vae_path),
-        ]
-
+        # Initialize ModelManager
         self.model_manager = ModelManager(
-            torch_dtype=torch.bfloat16, device="cuda", file_path_list=file_paths
+            torch_dtype=torch.bfloat16,
+            device="cuda",
         )
 
-        # Initialize pipeline with tokenizer for UMT5 text encoder
-        self.pipeline = WanVideoPipeline(
-            device="cuda", torch_dtype=torch.bfloat16, tokenizer_path="google/umt5-xxl"
+        # Load models with explicit model_names mapping
+        # WanVideoPipeline.fetch_models expects: wan_video_text_encoder, wan_video_dit, wan_video_vae
+        logger.info("Loading models into ModelManager...")
+
+        # Load text encoder (wan_video_text_encoder)
+        self.model_manager.load_models(
+            [str(text_encoder_path)],
+            model_names=["wan_video_text_encoder"],
         )
 
-        # Load models into pipeline
-        logger.info("Loading models into pipeline...")
-        self.model_manager.load_models(file_paths)
+        # Load DiT - both high and low noise variants together (wan_video_dit)
+        self.model_manager.load_models(
+            [[str(high_noise_path), str(low_noise_path)]],
+            model_names=["wan_video_dit"],
+        )
 
-        # Fetch and assign models to pipeline
-        self.pipeline.text_encoder = self.model_manager.fetch_model("text_encoder")
-        self.pipeline.dit = self.model_manager.fetch_model("dit")
-        self.pipeline.vae = self.model_manager.fetch_model("vae")
+        # Load VAE (wan_video_vae)
+        self.model_manager.load_models(
+            [str(vae_path)],
+            model_names=["wan_video_vae"],
+        )
 
-        # Load Lightning LoRAs for 4-step inference if available
+        # Load Lightning LoRAs if available
         if lightning_high_noise_path.exists() and lightning_low_noise_path.exists():
-            logger.info("Loading Lightning LoRAs for 4-step inference...")
+            logger.info("Loading Lightning LoRAs for fast inference...")
             self.model_manager.load_lora(
                 file_path=str(lightning_high_noise_path), lora_alpha=1.0
             )
@@ -128,9 +130,21 @@ class I2VHandler:
             )
             logger.info("Lightning LoRAs loaded")
         else:
-            logger.warning(
-                "Lightning LoRAs not found, using standard 50-step inference"
-            )
+            logger.warning("Lightning LoRAs not found, using standard inference")
+
+        # Create pipeline from model manager
+        # This calls fetch_models which assigns models and sets up the prompter
+        logger.info("Creating pipeline from ModelManager...")
+        self.pipeline = WanVideoPipeline.from_model_manager(
+            self.model_manager,
+            torch_dtype=torch.bfloat16,
+            device="cuda",
+        )
+
+        # Ensure prompter has tokenizer loaded (downloads from HuggingFace if needed)
+        if self.pipeline.prompter.tokenizer is None:
+            logger.info("Loading tokenizer from google/umt5-xxl...")
+            self.pipeline.prompter.fetch_tokenizer("google/umt5-xxl")
 
         # Log VRAM usage after loading
         if torch.cuda.is_available():
