@@ -7,8 +7,8 @@ import (
 func TestRequiredModels(t *testing.T) {
 	models := RequiredModels()
 
-	if len(models) != 7 {
-		t.Errorf("expected 7 required models, got %d", len(models))
+	if len(models) != 10 {
+		t.Errorf("expected 10 required models, got %d", len(models))
 	}
 
 	// Check that all models have valid data
@@ -35,9 +35,12 @@ func TestRequiredModels(t *testing.T) {
 		"wan2.2_i2v_low_noise_14B_fp16.safetensors",
 		"umt5_xxl_fp16.safetensors",
 		"wan_2.1_vae.safetensors",
+		"wan2.2_lightning_high_noise.safetensors",
+		"wan2.2_lightning_low_noise.safetensors",
 		"qwen_image_edit_2511_bf16.safetensors",
 		"qwen_2.5_vl_7b.safetensors",
 		"qwen_image_vae.safetensors",
+		"Qwen-Image-Edit-2511-Lightning-4steps-V1.0-bf16.safetensors",
 	}
 
 	for _, expected := range expectedModels {
@@ -82,7 +85,11 @@ func TestDownloaderNew(t *testing.T) {
 
 func TestModelFileURL(t *testing.T) {
 	models := RequiredModels()
-	hfPrefix := "https://huggingface.co/Comfy-Org/"
+	hfBase := "https://huggingface.co/"
+	validPrefixes := []string{
+		"https://huggingface.co/Comfy-Org/",
+		"https://huggingface.co/lightx2v/",
+	}
 
 	// Verify all URLs are valid HuggingFace URLs
 	for _, model := range models {
@@ -91,9 +98,21 @@ func TestModelFileURL(t *testing.T) {
 			continue
 		}
 
-		// URLs should be full HuggingFace URLs
-		if len(model.URL) < len(hfPrefix) || model.URL[:len(hfPrefix)] != hfPrefix {
-			t.Errorf("model %s URL should start with %s, got %s", model.Name, hfPrefix, model.URL)
+		// URLs should be HuggingFace URLs
+		if len(model.URL) < len(hfBase) || model.URL[:len(hfBase)] != hfBase {
+			t.Errorf("model %s URL should start with %s, got %s", model.Name, hfBase, model.URL)
+		}
+
+		// Check if URL has one of the valid prefixes
+		hasValidPrefix := false
+		for _, prefix := range validPrefixes {
+			if len(model.URL) >= len(prefix) && model.URL[:len(prefix)] == prefix {
+				hasValidPrefix = true
+				break
+			}
+		}
+		if !hasValidPrefix {
+			t.Errorf("model %s URL should start with one of %v, got %s", model.Name, validPrefixes, model.URL)
 		}
 
 		// URLs should end with .safetensors
