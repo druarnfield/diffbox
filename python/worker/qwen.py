@@ -2,27 +2,28 @@
 Qwen Image Edit 2511 handler with real diffsynth inference.
 """
 
-import time
+import base64
 import logging
+import time
+from io import BytesIO
 from pathlib import Path
 from typing import Optional
-import base64
-from io import BytesIO
 
 import torch
+
+# Import diffsynth components
+from diffsynth import ModelManager
 from PIL import Image
 
 from worker.protocol import send_progress
 
-# Import diffsynth components
-from diffsynth import ModelManager
 try:
     from diffsynth.pipelines.qwen_image import QwenImagePipeline
 except ImportError:
     # Fallback if the import path changes
     from diffsynth import QwenImagePipeline
 
-logger = logging.getLogger('worker.qwen')
+logger = logging.getLogger("worker.qwen")
 
 
 class ProgressTracker:
@@ -43,7 +44,7 @@ class ProgressTracker:
             send_progress(
                 self.job_id,
                 progress,
-                f"Denoising step {self.current_step}/{self.total_steps}"
+                f"Denoising step {self.current_step}/{self.total_steps}",
             )
 
 
@@ -77,7 +78,10 @@ class QwenHandler:
         dit_path = self.models_dir / "qwen_image_edit_2511_bf16.safetensors"
         text_encoder_path = self.models_dir / "qwen_2.5_vl_7b.safetensors"
         vae_path = self.models_dir / "qwen_image_vae.safetensors"
-        lightning_lora_path = self.models_dir / "Qwen-Image-Edit-2511-Lightning-4steps-V1.0-bf16.safetensors"
+        lightning_lora_path = (
+            self.models_dir
+            / "Qwen-Image-Edit-2511-Lightning-4steps-V1.0-bf16.safetensors"
+        )
 
         # Validate models exist
         for path in [dit_path, text_encoder_path, vae_path]:
@@ -96,18 +100,11 @@ class QwenHandler:
         ]
 
         self.model_manager = ModelManager(
-            torch_dtype=torch.bfloat16,
-            device="cuda",
-            file_path_list=file_paths
+            torch_dtype=torch.bfloat16, device="cuda", file_path_list=file_paths
         )
 
-        # Initialize pipeline with tokenizer path for Qwen2VL
-        # The official DiffSynth expects tokenizer path for Qwen models
-        self.pipeline = QwenImagePipeline(
-            device="cuda",
-            torch_dtype=torch.bfloat16,
-            tokenizer_path="Qwen/Qwen2-VL-7B-Instruct"
-        )
+        # Initialize pipeline
+        self.pipeline = QwenImagePipeline(device="cuda", torch_dtype=torch.bfloat16)
 
         # Load models into pipeline
         logger.info("Loading models into pipeline...")
@@ -121,16 +118,22 @@ class QwenHandler:
         # Load Lightning LoRA for 4-step inference if available
         if lightning_lora_path.exists():
             logger.info("Loading Lightning LoRA for 4-step inference...")
-            self.model_manager.load_lora(file_path=str(lightning_lora_path), lora_alpha=1.0)
+            self.model_manager.load_lora(
+                file_path=str(lightning_lora_path), lora_alpha=1.0
+            )
             logger.info("Lightning LoRA loaded")
         else:
-            logger.warning(f"Lightning LoRA not found at {lightning_lora_path}, using standard 30-step inference")
+            logger.warning(
+                f"Lightning LoRA not found at {lightning_lora_path}, using standard 30-step inference"
+            )
 
         # Log VRAM usage after loading
         if torch.cuda.is_available():
             allocated = torch.cuda.memory_allocated(0) / 1e9
             reserved = torch.cuda.memory_reserved(0) / 1e9
-            logger.info(f"Pipeline loaded - VRAM allocated: {allocated:.1f} GB, reserved: {reserved:.1f} GB")
+            logger.info(
+                f"Pipeline loaded - VRAM allocated: {allocated:.1f} GB, reserved: {reserved:.1f} GB"
+            )
 
         send_progress(None, 0.0, "Pipeline loaded")
 
@@ -140,7 +143,10 @@ class QwenHandler:
 
         logger.info(f"Starting Qwen job {job_id}")
         # Log params without image data (which can be megabytes of base64)
-        safe_params = {k: (f"<{len(v)} chars>" if k == "edit_images" else v) for k, v in params.items()}
+        safe_params = {
+            k: (f"<{len(v)} chars>" if k == "edit_images" else v)
+            for k, v in params.items()
+        }
         logger.info(f"Parameters: {safe_params}")
 
         self._load_pipeline()
@@ -151,7 +157,9 @@ class QwenHandler:
         seed = params.get("seed")
         height = params.get("height", 1024)
         width = params.get("width", 1024)
-        num_inference_steps = params.get("num_inference_steps", 4)  # Lightning LoRA uses 4 steps
+        num_inference_steps = params.get(
+            "num_inference_steps", 4
+        )  # Lightning LoRA uses 4 steps
         cfg_scale = params.get("cfg_scale", 1.0)  # Lightning LoRA uses minimal CFG
 
         # Decode input images from base64 (up to 3)
@@ -174,8 +182,10 @@ class QwenHandler:
 
         # Log VRAM before inference
         if torch.cuda.is_available():
-            free_memory = (torch.cuda.get_device_properties(0).total_memory -
-                          torch.cuda.memory_allocated(0)) / 1e9
+            free_memory = (
+                torch.cuda.get_device_properties(0).total_memory
+                - torch.cuda.memory_allocated(0)
+            ) / 1e9
             logger.info(f"Free VRAM before inference: {free_memory:.1f} GB")
 
         send_progress(job_id, 0.05, "Starting inference")

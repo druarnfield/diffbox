@@ -2,24 +2,24 @@
 Wan 2.2 Image-to-Video handler with real diffsynth inference.
 """
 
+import base64
+import logging
 import subprocess
 import tempfile
 import time
-import logging
+from io import BytesIO
 from pathlib import Path
 from typing import Optional
-import base64
-from io import BytesIO
 
 import torch
+
+# Import diffsynth components
+from diffsynth import ModelManager, WanVideoPipeline
 from PIL import Image
 
 from worker.protocol import send_progress
 
-# Import diffsynth components
-from diffsynth import WanVideoPipeline, ModelManager
-
-logger = logging.getLogger('worker.i2v')
+logger = logging.getLogger("worker.i2v")
 
 
 class ProgressTracker:
@@ -40,7 +40,7 @@ class ProgressTracker:
             send_progress(
                 self.job_id,
                 progress,
-                f"Denoising step {self.current_step}/{self.total_steps}"
+                f"Denoising step {self.current_step}/{self.total_steps}",
             )
 
 
@@ -75,8 +75,12 @@ class I2VHandler:
         low_noise_path = self.models_dir / "wan2.2_i2v_low_noise_14B_fp16.safetensors"
         text_encoder_path = self.models_dir / "umt5_xxl_fp16.safetensors"
         vae_path = self.models_dir / "wan_2.1_vae.safetensors"
-        lightning_high_noise_path = self.models_dir / "wan2.2_lightning_high_noise.safetensors"
-        lightning_low_noise_path = self.models_dir / "wan2.2_lightning_low_noise.safetensors"
+        lightning_high_noise_path = (
+            self.models_dir / "wan2.2_lightning_high_noise.safetensors"
+        )
+        lightning_low_noise_path = (
+            self.models_dir / "wan2.2_lightning_low_noise.safetensors"
+        )
 
         # Validate models exist
         for path in [high_noise_path, low_noise_path, text_encoder_path, vae_path]:
@@ -96,13 +100,13 @@ class I2VHandler:
         ]
 
         self.model_manager = ModelManager(
-            torch_dtype=torch.bfloat16,
-            device="cuda",
-            file_path_list=file_paths
+            torch_dtype=torch.bfloat16, device="cuda", file_path_list=file_paths
         )
 
-        # Initialize pipeline
-        self.pipeline = WanVideoPipeline(device="cuda", torch_dtype=torch.bfloat16)
+        # Initialize pipeline with tokenizer for UMT5 text encoder
+        self.pipeline = WanVideoPipeline(
+            device="cuda", torch_dtype=torch.bfloat16, tokenizer_path="google/umt5-xxl"
+        )
 
         # Load models into pipeline
         logger.info("Loading models into pipeline...")
@@ -116,17 +120,25 @@ class I2VHandler:
         # Load Lightning LoRAs for 4-step inference if available
         if lightning_high_noise_path.exists() and lightning_low_noise_path.exists():
             logger.info("Loading Lightning LoRAs for 4-step inference...")
-            self.model_manager.load_lora(file_path=str(lightning_high_noise_path), lora_alpha=1.0)
-            self.model_manager.load_lora(file_path=str(lightning_low_noise_path), lora_alpha=1.0)
+            self.model_manager.load_lora(
+                file_path=str(lightning_high_noise_path), lora_alpha=1.0
+            )
+            self.model_manager.load_lora(
+                file_path=str(lightning_low_noise_path), lora_alpha=1.0
+            )
             logger.info("Lightning LoRAs loaded")
         else:
-            logger.warning("Lightning LoRAs not found, using standard 50-step inference")
+            logger.warning(
+                "Lightning LoRAs not found, using standard 50-step inference"
+            )
 
         # Log VRAM usage after loading
         if torch.cuda.is_available():
             allocated = torch.cuda.memory_allocated(0) / 1e9
             reserved = torch.cuda.memory_reserved(0) / 1e9
-            logger.info(f"Pipeline loaded - VRAM allocated: {allocated:.1f} GB, reserved: {reserved:.1f} GB")
+            logger.info(
+                f"Pipeline loaded - VRAM allocated: {allocated:.1f} GB, reserved: {reserved:.1f} GB"
+            )
 
         send_progress(None, 0.0, "Pipeline loaded")
 
@@ -136,7 +148,10 @@ class I2VHandler:
 
         logger.info(f"Starting I2V job {job_id}")
         # Log params without image data (which can be megabytes of base64)
-        safe_params = {k: (f"<{len(v)} chars>" if k == "input_image" else v) for k, v in params.items()}
+        safe_params = {
+            k: (f"<{len(v)} chars>" if k == "input_image" else v)
+            for k, v in params.items()
+        }
         logger.info(f"Parameters: {safe_params}")
 
         self._load_pipeline()
@@ -149,7 +164,9 @@ class I2VHandler:
         height = params.get("height", 480)
         width = params.get("width", 832)
         num_frames = params.get("num_frames", 81)
-        num_inference_steps = params.get("num_inference_steps", 4)  # Lightning LoRA uses 4 steps
+        num_inference_steps = params.get(
+            "num_inference_steps", 4
+        )  # Lightning LoRA uses 4 steps
         cfg_scale = params.get("cfg_scale", 1.0)  # Lightning LoRA uses minimal CFG
         denoising_strength = params.get("denoising_strength", 1.0)
         tiled = params.get("tiled", True)
@@ -171,8 +188,10 @@ class I2VHandler:
 
         # Log VRAM before inference
         if torch.cuda.is_available():
-            free_memory = (torch.cuda.get_device_properties(0).total_memory -
-                          torch.cuda.memory_allocated(0)) / 1e9
+            free_memory = (
+                torch.cuda.get_device_properties(0).total_memory
+                - torch.cuda.memory_allocated(0)
+            ) / 1e9
             logger.info(f"Free VRAM before inference: {free_memory:.1f} GB")
 
         send_progress(job_id, 0.05, "Starting inference")
@@ -201,7 +220,9 @@ class I2VHandler:
 
         inference_duration = time.time() - inference_start
         fps_generation = num_frames / inference_duration
-        logger.info(f"Inference completed in {inference_duration:.1f}s ({fps_generation:.2f} frames/sec)")
+        logger.info(
+            f"Inference completed in {inference_duration:.1f}s ({fps_generation:.2f} frames/sec)"
+        )
 
         send_progress(job_id, 0.95, "Encoding video")
 
@@ -244,6 +265,7 @@ class I2VHandler:
                 else:
                     # Try to convert from numpy array
                     import numpy as np
+
                     if isinstance(frame, np.ndarray):
                         if frame.max() <= 1.0:
                             frame = (frame * 255).astype("uint8")
@@ -254,23 +276,31 @@ class I2VHandler:
             # Encode with ffmpeg
             result = subprocess.run(
                 [
-                    "ffmpeg", "-y",
-                    "-framerate", str(fps),
-                    "-i", f"{tmpdir}/frame_%05d.png",
-                    "-c:v", "libx264",
-                    "-pix_fmt", "yuv420p",
-                    "-crf", "18",
-                    str(output_path)
+                    "ffmpeg",
+                    "-y",
+                    "-framerate",
+                    str(fps),
+                    "-i",
+                    f"{tmpdir}/frame_%05d.png",
+                    "-c:v",
+                    "libx264",
+                    "-pix_fmt",
+                    "yuv420p",
+                    "-crf",
+                    "18",
+                    str(output_path),
                 ],
                 capture_output=True,
                 check=False,
             )
 
             if result.returncode != 0:
-                error_msg = result.stderr.decode('utf-8', errors='replace')
+                error_msg = result.stderr.decode("utf-8", errors="replace")
                 logger.error(f"ffmpeg encoding failed (exit code {result.returncode})")
                 logger.error(f"ffmpeg stderr: {error_msg}")
-                raise RuntimeError(f"Video encoding failed: {error_msg[:500]}")  # Truncate long error
+                raise RuntimeError(
+                    f"Video encoding failed: {error_msg[:500]}"
+                )  # Truncate long error
 
             encode_duration = time.time() - encode_start
             logger.info(f"Video encoded in {encode_duration:.1f}s")
