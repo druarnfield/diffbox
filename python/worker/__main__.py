@@ -7,7 +7,6 @@ Communicates with Go backend via stdin/stdout JSON protocol.
 import json
 import sys
 import os
-import traceback
 import logging
 
 # Configure logging
@@ -21,7 +20,7 @@ logger = logging.getLogger('worker')
 # Add parent directory to path for diffsynth import
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from worker.protocol import read_message, send_ready, send_complete, send_error
+from worker.protocol import read_message, send_ready, send_complete, send_error  # noqa: E402
 
 
 def main():
@@ -86,7 +85,7 @@ def main():
                     error_msg = f"{type(e).__name__}: {str(e)}"
                     logger.error(f"Job {job_id} failed: {error_msg}")
                     logger.error(f"Job {job_id} parameters: {params}")
-                    logger.error(f"Traceback:", exc_info=True)
+                    logger.error("Traceback:", exc_info=True)
                     send_error(job_id, error_msg)
 
         except json.JSONDecodeError as e:
