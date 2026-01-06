@@ -159,6 +159,17 @@ func (m *Manager) spawnWorker(id int) (*Worker, error) {
 	// Handle stderr (logs)
 	go m.handleWorkerLogs(worker)
 
+	// Monitor worker process health
+	go func() {
+		err := cmd.Wait()
+		worker.running = false
+		if err != nil {
+			log.Printf("ERROR - Worker %d exited with error: %v", id, err)
+		} else {
+			log.Printf("Worker %d exited cleanly", id)
+		}
+	}()
+
 	log.Printf("Worker %d started (PID: %d)", id, cmd.Process.Pid)
 
 	return worker, nil
@@ -220,16 +231,20 @@ func (m *Manager) handleWorkerLogs(w *Worker) {
 	for scanner.Scan() {
 		line := scanner.Text()
 
-		// Filter out noisy Python warnings
-		if strings.Contains(line, "UserWarning") ||
-			strings.Contains(line, "FutureWarning") ||
-			strings.Contains(line, "DeprecationWarning") ||
-			strings.Contains(line, "/site-packages/") {
+		// Only filter out very specific noisy warnings, not all site-packages
+		if strings.Contains(line, "pynvml package is deprecated") {
 			continue
 		}
 
-		// Log with worker ID prefix (removed [stderr])
+		// Log with worker ID prefix
 		log.Printf("Worker %d: %s", w.id, line)
+	}
+
+	// Log when stderr closes (worker exited)
+	if err := scanner.Err(); err != nil {
+		log.Printf("ERROR - Worker %d stderr closed with error: %v", w.id, err)
+	} else {
+		log.Printf("Worker %d stderr closed (worker may have exited)", w.id)
 	}
 }
 
