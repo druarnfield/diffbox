@@ -82,7 +82,6 @@ export function ChatForm({ className }: ChatFormProps) {
         progress: 0,
         stage: "Queued",
         params: { messages: newMessages },
-        createdAt: new Date(),
       });
     } catch (error) {
       console.error("Chat submission error:", error);
