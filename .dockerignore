@@ -19,7 +19,7 @@ __pycache__/
 *.so
 .Python
 python/.venv
-python/uv.lock
+# python/uv.lock - ALLOW: needed for Docker build
 .pytest_cache/
 
 # Go
@@ -32,7 +32,7 @@ vendor/
 
 # Node
 web/node_modules
-web/dist
+# web/dist - ALLOW: needed for Docker build
 web/.vite
 
 # Documentation
