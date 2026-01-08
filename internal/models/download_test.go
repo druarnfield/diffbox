@@ -7,8 +7,8 @@ import (
 func TestRequiredModels(t *testing.T) {
 	models := RequiredModels()
 
-	if len(models) != 14 {
-		t.Errorf("expected 14 required models, got %d", len(models))
+	if len(models) != 29 {
+		t.Errorf("expected 29 required models, got %d", len(models))
 	}
 
 	// Check that all models have valid data
@@ -93,7 +93,8 @@ func TestModelFileURL(t *testing.T) {
 	validPrefixes := []string{
 		"https://huggingface.co/Comfy-Org/",
 		"https://huggingface.co/lightx2v/",
-		"https://huggingface.co/Qwen/", // For tokenizer files
+		"https://huggingface.co/Qwen/",  // For tokenizer files
+		"https://huggingface.co/dphn/",  // For Dolphin-Mistral chat model
 	}
 
 	// Verify all URLs are valid HuggingFace URLs
@@ -120,9 +121,15 @@ func TestModelFileURL(t *testing.T) {
 			t.Errorf("model %s URL should start with one of %v, got %s", model.Name, validPrefixes, model.URL)
 		}
 
-		// Model weight files should end with .safetensors, tokenizer files have other extensions
-		isTokenizerFile := len(model.Name) >= 14 && model.Name[:14] == "qwen_tokenizer"
-		if !isTokenizerFile {
+		// Model weight files should end with .safetensors, config/tokenizer files have other extensions
+		isTokenizerOrConfigFile := len(model.Name) >= 14 && model.Name[:14] == "qwen_tokenizer" ||
+			model.Name == "dolphin-mistral-24b/config.json" ||
+			model.Name == "dolphin-mistral-24b/model.safetensors.index.json" ||
+			model.Name == "dolphin-mistral-24b/tokenizer.json" ||
+			model.Name == "dolphin-mistral-24b/tokenizer_config.json" ||
+			model.Name == "dolphin-mistral-24b/special_tokens_map.json"
+
+		if !isTokenizerOrConfigFile {
 			if len(model.URL) < 12 || model.URL[len(model.URL)-12:] != ".safetensors" {
 				t.Errorf("model %s URL should end with .safetensors, got %s", model.Name, model.URL)
 			}

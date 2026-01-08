@@ -53,6 +53,7 @@ class SVIHandler:
         # TODO: Implement actual SVI inference with clip-by-clip generation
         # For now, simulate progress
         import time
+
         total_clips = num_clips
         for clip_idx in range(total_clips):
             for step in range(5):  # Simulate steps per clip

@@ -4,7 +4,6 @@ Chat handler using vLLM for Dolphin-Mistral model.
 
 import logging
 from pathlib import Path
-from typing import Optional
 
 from worker.protocol import send_progress
 
@@ -24,7 +23,7 @@ class ChatHandler:
         if self.llm is not None:
             return
 
-        from vllm import LLM, SamplingParams
+        from vllm import LLM
 
         logger.info("Loading Dolphin-Mistral model with vLLM...")
 
