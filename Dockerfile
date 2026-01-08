@@ -31,7 +31,8 @@ COPY python/pyproject.toml python/uv.lock ./
 RUN uv sync --frozen
 
 # Copy Python worker code (separate layer from deps for better caching)
-COPY python/ ./
+# Explicitly copy only source files, not .venv
+COPY python/worker ./worker
 
 # Copy frontend static files (separate layer, changes less frequently than Go binary)
 COPY web/dist /app/static
