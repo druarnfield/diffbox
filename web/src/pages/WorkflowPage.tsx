@@ -108,7 +108,10 @@ export default function WorkflowPage() {
           stage: j.stage,
           params: j.params,
           output: j.output
-            ? { type: j.output.type as "video" | "image", path: j.output.path, ...j.output }
+            ? {
+                ...j.output,
+                type: j.output.type as "video" | "image" | undefined,
+              }
             : undefined,
           error: j.error,
           createdAt: new Date(j.created_at),
