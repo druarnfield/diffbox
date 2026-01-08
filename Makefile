@@ -139,3 +139,45 @@ endif
 	@echo "  6. Volume: /workspace/models -> /models"
 	@echo "  7. Volume: /workspace/outputs -> /outputs"
 	@echo "  8. Volume: /workspace/data -> /data"
+
+# RunPod Serverless targets
+.PHONY: docker-serverless push-serverless
+
+# Build RunPod Serverless image (GPU inference only)
+docker-serverless:
+	@echo "Building RunPod Serverless image..."
+	docker build -f Dockerfile.serverless -t $(DOCKER_IMAGE)-serverless:latest .
+	@echo ""
+	@echo "✓ Serverless image built successfully!"
+	@echo "  Image: $(DOCKER_IMAGE)-serverless:latest"
+	@echo ""
+	@echo "This image contains:"
+	@echo "  - ComfyUI (I2V, Qwen workflows)"
+	@echo "  - Dolphin-Mistral chat model"
+	@echo "  - RunPod serverless handler"
+	@echo ""
+	@echo "Next: make push-serverless REGISTRY=your-username"
+
+# Push serverless image to registry
+# Usage: make push-serverless REGISTRY=your-dockerhub-username
+push-serverless:
+ifndef REGISTRY
+	@echo "Error: REGISTRY not set"
+	@echo "Usage: make push-serverless REGISTRY=your-dockerhub-username"
+	@exit 1
+endif
+	@echo "Tagging and pushing to $(REGISTRY)/$(DOCKER_IMAGE)-serverless:latest..."
+	docker tag $(DOCKER_IMAGE)-serverless:latest $(REGISTRY)/$(DOCKER_IMAGE)-serverless:latest
+	docker push $(REGISTRY)/$(DOCKER_IMAGE)-serverless:latest
+	@echo ""
+	@echo "✓ Image pushed successfully!"
+	@echo "  Registry: $(REGISTRY)/$(DOCKER_IMAGE)-serverless:latest"
+	@echo ""
+	@echo "Deploy to RunPod Serverless:"
+	@echo "  1. Go to https://runpod.io/console/serverless"
+	@echo "  2. Create New Endpoint"
+	@echo "  3. Container Image: $(REGISTRY)/$(DOCKER_IMAGE)-serverless:latest"
+	@echo "  4. GPU: RTX 4090 or A40 (24GB+ VRAM)"
+	@echo "  5. Network Volume: Create 100GB volume for models"
+	@echo "  6. Mount path: /runpod-volume"
+	@echo "  7. Copy endpoint ID for RUNPOD_ENDPOINT_ID env var"

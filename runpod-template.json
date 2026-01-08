@@ -1,0 +1,37 @@
+{
+  "name": "diffbox-serverless",
+  "description": "AI video/image generation and chat inference (ComfyUI + Dolphin-Mistral)",
+  "dockerImage": "ghcr.io/druarnfield/diffbox:serverless",
+  "containerDiskInGb": 60,
+  "volumeInGb": 200,
+  "volumeMountPath": "/runpod-volume",
+  "env": [
+    {
+      "key": "DIFFBOX_MODELS_DIR",
+      "value": "/runpod-volume/models"
+    },
+    {
+      "key": "DIFFBOX_OUTPUTS_DIR",
+      "value": "/runpod-volume/outputs"
+    },
+    {
+      "key": "COMFYUI_URL",
+      "value": "http://localhost:8188"
+    },
+    {
+      "key": "PRELOAD_MODELS",
+      "value": "true",
+      "description": "Pre-load models on container start for faster first request"
+    },
+    {
+      "key": "PRELOAD_TYPES",
+      "value": "chat",
+      "description": "Comma-separated list of models to preload (chat, i2v, qwen)"
+    }
+  ],
+  "startupTime": 60,
+  "gpu": {
+    "minVram": 24,
+    "recommended": "RTX 4090 or A40"
+  }
+}

@@ -1,0 +1,63 @@
+# RunPod Serverless Dockerfile for diffbox inference workers
+# Handles I2V, Qwen, and Chat inference on GPU
+
+FROM nvidia/cuda:12.1.0-runtime-ubuntu22.04
+
+ENV DEBIAN_FRONTEND=noninteractive \
+    PYTHONUNBUFFERED=1 \
+    DIFFBOX_MODELS_DIR=/runpod-volume/models \
+    DIFFBOX_OUTPUTS_DIR=/runpod-volume/outputs \
+    COMFYUI_URL=http://localhost:8188
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    python3.11 \
+    python3.11-dev \
+    python3-pip \
+    git \
+    wget \
+    curl \
+    ffmpeg \
+    libgl1 \
+    libglib2.0-0 \
+    && rm -rf /var/lib/apt/lists/*
+
+# Make Python 3.11 the default
+RUN update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.11 1 && \
+    update-alternatives --install /usr/bin/python python /usr/bin/python3.11 1
+
+# Upgrade pip
+RUN python3 -m pip install --upgrade pip
+
+# Install ComfyUI
+WORKDIR /app/comfyui
+RUN git clone https://github.com/comfyanonymous/ComfyUI.git . && \
+    pip install --no-cache-dir -r requirements.txt && \
+    pip install --no-cache-dir websocket-client
+
+# Install uv for Python dependency management
+RUN pip install --no-cache-dir uv
+
+# Copy diffbox Python worker code
+WORKDIR /app/diffbox/python
+COPY python/pyproject.toml python/uv.lock ./
+RUN uv sync --frozen
+
+# Copy worker source files
+COPY python/worker ./worker
+
+# Copy RunPod handler
+WORKDIR /app
+COPY runpod_handler.py ./
+
+# Install RunPod SDK
+RUN pip install --no-cache-dir runpod
+
+# Create directories for models and outputs (will be mounted from RunPod volume)
+RUN mkdir -p /runpod-volume/models /runpod-volume/outputs
+
+# Start ComfyUI in background, then run RunPod handler
+# RunPod will execute: python runpod_handler.py
+CMD python /app/comfyui/main.py --listen 0.0.0.0 --port 8188 & \
+    sleep 10 && \
+    cd /app && python runpod_handler.py
