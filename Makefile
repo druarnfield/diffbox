@@ -83,3 +83,59 @@ init: deps python-deps
 	cd web && npm install
 	@echo "Development environment initialized!"
 	@echo "Run 'make dev' to start the server"
+
+# RunPod deployment targets
+.PHONY: docker-runpod test-runpod push-runpod
+
+# Build RunPod-optimized single container
+docker-runpod:
+	@echo "Building RunPod optimized image (this will take 10-15 minutes)..."
+	docker build -f Dockerfile.runpod -t $(DOCKER_IMAGE)-runpod:latest .
+	@echo ""
+	@echo "✓ RunPod image built successfully!"
+	@echo "  Image: $(DOCKER_IMAGE)-runpod:latest"
+	@echo ""
+	@echo "Next steps:"
+	@echo "  1. Test locally: make test-runpod"
+	@echo "  2. Push to registry: make push-runpod REGISTRY=your-username"
+	@echo "  3. Deploy to RunPod using: your-username/$(DOCKER_IMAGE)-runpod:latest"
+
+# Test RunPod container locally (requires GPU)
+test-runpod:
+	@echo "Testing RunPod container locally..."
+	@echo "This requires:"
+	@echo "  - NVIDIA GPU"
+	@echo "  - nvidia-docker installed"
+	@echo ""
+	docker run --rm --gpus all \
+		-p 8080:8080 \
+		-p 8188:8188 \
+		-v $(PWD)/models:/models \
+		-v $(PWD)/outputs:/outputs \
+		-v $(PWD)/data:/data \
+		$(DOCKER_IMAGE)-runpod:latest
+
+# Push to container registry
+# Usage: make push-runpod REGISTRY=your-dockerhub-username
+push-runpod:
+ifndef REGISTRY
+	@echo "Error: REGISTRY not set"
+	@echo "Usage: make push-runpod REGISTRY=your-dockerhub-username"
+	@exit 1
+endif
+	@echo "Tagging and pushing to $(REGISTRY)/$(DOCKER_IMAGE)-runpod:latest..."
+	docker tag $(DOCKER_IMAGE)-runpod:latest $(REGISTRY)/$(DOCKER_IMAGE)-runpod:latest
+	docker push $(REGISTRY)/$(DOCKER_IMAGE)-runpod:latest
+	@echo ""
+	@echo "✓ Image pushed successfully!"
+	@echo "  Registry: $(REGISTRY)/$(DOCKER_IMAGE)-runpod:latest"
+	@echo ""
+	@echo "Deploy to RunPod:"
+	@echo "  1. Go to https://runpod.io/console/pods"
+	@echo "  2. Click 'Deploy'"
+	@echo "  3. Select GPU (RTX 4090 or A100 recommended)"
+	@echo "  4. Container Image: $(REGISTRY)/$(DOCKER_IMAGE)-runpod:latest"
+	@echo "  5. Expose HTTP Port: 8080"
+	@echo "  6. Volume: /workspace/models -> /models"
+	@echo "  7. Volume: /workspace/outputs -> /outputs"
+	@echo "  8. Volume: /workspace/data -> /data"
