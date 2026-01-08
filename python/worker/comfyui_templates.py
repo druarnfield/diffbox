@@ -7,8 +7,6 @@ import logging
 from pathlib import Path
 from typing import Any, Dict, Optional
 
-from PIL import Image
-
 logger = logging.getLogger(__name__)
 
 
