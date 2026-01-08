@@ -51,6 +51,7 @@ func NewRouter(cfg *config.Config, database *db.DB, q queue.Queue, aria2Client *
 			r.Post("/i2v", s.handleI2VSubmit)
 			r.Post("/svi", s.handleSVISubmit)
 			r.Post("/qwen", s.handleQwenSubmit)
+			r.Post("/chat", s.handleChatSubmit)
 		})
 
 		// Jobs

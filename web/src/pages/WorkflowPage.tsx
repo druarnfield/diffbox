@@ -3,12 +3,13 @@ import { useParams, useNavigate } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import { I2VForm } from "@/components/I2VForm";
 import { QwenForm } from "@/components/QwenForm";
+import { ChatForm } from "@/components/ChatForm";
 import { OutputGallery } from "@/components/OutputGallery";
 import { useWebSocket } from "@/hooks/useWebSocket";
 import { fetchJobs } from "@/api/workflows";
 import { useJobStore } from "@/stores/jobStore";
 
-type WorkflowType = "i2v" | "qwen";
+type WorkflowType = "i2v" | "qwen" | "chat";
 
 const workflows: {
   id: WorkflowType;
@@ -56,10 +57,30 @@ const workflows: {
       </svg>
     ),
   },
+  {
+    id: "chat",
+    name: "Prompt Assistant",
+    description: "AI Prompt Generator",
+    icon: (
+      <svg
+        className="w-5 h-5"
+        fill="none"
+        viewBox="0 0 24 24"
+        stroke="currentColor"
+      >
+        <path
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          strokeWidth={1.5}
+          d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"
+        />
+      </svg>
+    ),
+  },
 ];
 
 function isValidWorkflow(type: string | undefined): type is WorkflowType {
-  return type === "i2v" || type === "qwen";
+  return type === "i2v" || type === "qwen" || type === "chat";
 }
 
 export default function WorkflowPage() {
@@ -81,13 +102,13 @@ export default function WorkflowPage() {
         // Convert API jobs to store format
         const jobs = apiJobs.map((j) => ({
           id: j.id,
-          type: j.type as "i2v" | "qwen",
+          type: j.type as "i2v" | "qwen" | "chat",
           status: j.status as "pending" | "running" | "completed" | "failed",
           progress: j.progress,
           stage: j.stage,
           params: j.params,
           output: j.output
-            ? { type: j.output.type as "video" | "image", path: j.output.path }
+            ? { type: j.output.type as "video" | "image", path: j.output.path, ...j.output }
             : undefined,
           error: j.error,
           createdAt: new Date(j.created_at),
@@ -142,14 +163,17 @@ export default function WorkflowPage() {
         <div>
           {activeWorkflow === "i2v" && <I2VForm />}
           {activeWorkflow === "qwen" && <QwenForm />}
+          {activeWorkflow === "chat" && <ChatForm />}
         </div>
 
         {/* Sidebar with job history */}
-        <OutputGallery className="hidden xl:block" />
+        {activeWorkflow !== "chat" && (
+          <OutputGallery className="hidden xl:block" />
+        )}
       </div>
 
       {/* Mobile job history */}
-      <OutputGallery className="xl:hidden" />
+      {activeWorkflow !== "chat" && <OutputGallery className="xl:hidden" />}
     </div>
   );
 }

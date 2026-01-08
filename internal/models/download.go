@@ -118,6 +118,97 @@ func RequiredModels() []ModelFile {
 			Size:     6_000, // ~6KB
 			Workflow: "qwen",
 		},
+		// Dolphin-Mistral 24B - Chat Model for prompt generation
+		{
+			Name:     "dolphin-mistral-24b/config.json",
+			URL:      hfBase + "/dphn/Dolphin-Mistral-24B-Venice-Edition/resolve/main/config.json",
+			Size:     1_000, // ~1KB
+			Workflow: "chat",
+		},
+		{
+			Name:     "dolphin-mistral-24b/model-00001-of-00010.safetensors",
+			URL:      hfBase + "/dphn/Dolphin-Mistral-24B-Venice-Edition/resolve/main/model-00001-of-00010.safetensors",
+			Size:     4_980_000_000, // ~5GB
+			Workflow: "chat",
+		},
+		{
+			Name:     "dolphin-mistral-24b/model-00002-of-00010.safetensors",
+			URL:      hfBase + "/dphn/Dolphin-Mistral-24B-Venice-Edition/resolve/main/model-00002-of-00010.safetensors",
+			Size:     5_000_000_000, // ~5GB
+			Workflow: "chat",
+		},
+		{
+			Name:     "dolphin-mistral-24b/model-00003-of-00010.safetensors",
+			URL:      hfBase + "/dphn/Dolphin-Mistral-24B-Venice-Edition/resolve/main/model-00003-of-00010.safetensors",
+			Size:     5_000_000_000, // ~5GB
+			Workflow: "chat",
+		},
+		{
+			Name:     "dolphin-mistral-24b/model-00004-of-00010.safetensors",
+			URL:      hfBase + "/dphn/Dolphin-Mistral-24B-Venice-Edition/resolve/main/model-00004-of-00010.safetensors",
+			Size:     5_000_000_000, // ~5GB
+			Workflow: "chat",
+		},
+		{
+			Name:     "dolphin-mistral-24b/model-00005-of-00010.safetensors",
+			URL:      hfBase + "/dphn/Dolphin-Mistral-24B-Venice-Edition/resolve/main/model-00005-of-00010.safetensors",
+			Size:     5_000_000_000, // ~5GB
+			Workflow: "chat",
+		},
+		{
+			Name:     "dolphin-mistral-24b/model-00006-of-00010.safetensors",
+			URL:      hfBase + "/dphn/Dolphin-Mistral-24B-Venice-Edition/resolve/main/model-00006-of-00010.safetensors",
+			Size:     5_000_000_000, // ~5GB
+			Workflow: "chat",
+		},
+		{
+			Name:     "dolphin-mistral-24b/model-00007-of-00010.safetensors",
+			URL:      hfBase + "/dphn/Dolphin-Mistral-24B-Venice-Edition/resolve/main/model-00007-of-00010.safetensors",
+			Size:     5_000_000_000, // ~5GB
+			Workflow: "chat",
+		},
+		{
+			Name:     "dolphin-mistral-24b/model-00008-of-00010.safetensors",
+			URL:      hfBase + "/dphn/Dolphin-Mistral-24B-Venice-Edition/resolve/main/model-00008-of-00010.safetensors",
+			Size:     5_000_000_000, // ~5GB
+			Workflow: "chat",
+		},
+		{
+			Name:     "dolphin-mistral-24b/model-00009-of-00010.safetensors",
+			URL:      hfBase + "/dphn/Dolphin-Mistral-24B-Venice-Edition/resolve/main/model-00009-of-00010.safetensors",
+			Size:     5_000_000_000, // ~5GB
+			Workflow: "chat",
+		},
+		{
+			Name:     "dolphin-mistral-24b/model-00010-of-00010.safetensors",
+			URL:      hfBase + "/dphn/Dolphin-Mistral-24B-Venice-Edition/resolve/main/model-00010-of-00010.safetensors",
+			Size:     4_490_000_000, // ~4.5GB
+			Workflow: "chat",
+		},
+		{
+			Name:     "dolphin-mistral-24b/model.safetensors.index.json",
+			URL:      hfBase + "/dphn/Dolphin-Mistral-24B-Venice-Edition/resolve/main/model.safetensors.index.json",
+			Size:     100_000, // ~100KB
+			Workflow: "chat",
+		},
+		{
+			Name:     "dolphin-mistral-24b/tokenizer.json",
+			URL:      hfBase + "/dphn/Dolphin-Mistral-24B-Venice-Edition/resolve/main/tokenizer.json",
+			Size:     1_840_000, // ~1.8MB
+			Workflow: "chat",
+		},
+		{
+			Name:     "dolphin-mistral-24b/tokenizer_config.json",
+			URL:      hfBase + "/dphn/Dolphin-Mistral-24B-Venice-Edition/resolve/main/tokenizer_config.json",
+			Size:     50_000, // ~50KB
+			Workflow: "chat",
+		},
+		{
+			Name:     "dolphin-mistral-24b/special_tokens_map.json",
+			URL:      hfBase + "/dphn/Dolphin-Mistral-24B-Venice-Edition/resolve/main/special_tokens_map.json",
+			Size:     500, // ~500B
+			Workflow: "chat",
+		},
 	}
 }
 

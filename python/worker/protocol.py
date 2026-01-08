@@ -32,7 +32,9 @@ def send_ready():
     send_message("ready")
 
 
-def send_progress(job_id: str, progress: float, stage: str, preview: Optional[str] = None):
+def send_progress(
+    job_id: str, progress: float, stage: str, preview: Optional[str] = None
+):
     """Send job progress update."""
     data = {
         "job_id": job_id,

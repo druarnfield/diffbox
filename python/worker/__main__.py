@@ -11,11 +11,9 @@ import logging
 
 # Configure logging
 logging.basicConfig(
-    level=logging.INFO,
-    format='%(levelname)s [%(name)s] %(message)s',
-    stream=sys.stderr
+    level=logging.INFO, format="%(levelname)s [%(name)s] %(message)s", stream=sys.stderr
 )
-logger = logging.getLogger('worker')
+logger = logging.getLogger("worker")
 
 # Add parent directory to path for diffsynth import
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -40,13 +38,20 @@ def main():
         if job_type not in handlers:
             if job_type == "i2v":
                 from worker.i2v import I2VHandler
+
                 handlers[job_type] = I2VHandler(models_dir, outputs_dir)
             elif job_type == "svi":
                 from worker.svi import SVIHandler
+
                 handlers[job_type] = SVIHandler(models_dir, outputs_dir)
             elif job_type == "qwen":
                 from worker.qwen import QwenHandler
+
                 handlers[job_type] = QwenHandler(models_dir, outputs_dir)
+            elif job_type == "chat":
+                from worker.chat import ChatHandler
+
+                handlers[job_type] = ChatHandler(models_dir, outputs_dir)
             else:
                 raise ValueError(f"Unknown job type: {job_type}")
         return handlers[job_type]
@@ -85,9 +90,14 @@ def main():
                     error_msg = f"{type(e).__name__}: {str(e)}"
                     logger.error(f"Job {job_id} failed: {error_msg}")
                     # Log params without large base64 image data
-                    safe_params = {k: (f"<{len(v) if isinstance(v, (str, list)) else v} chars/items>"
-                                      if k in ("input_image", "edit_images") else v)
-                                  for k, v in params.items()}
+                    safe_params = {
+                        k: (
+                            f"<{len(v) if isinstance(v, (str, list)) else v} chars/items>"
+                            if k in ("input_image", "edit_images")
+                            else v
+                        )
+                        for k, v in params.items()
+                    }
                     logger.error(f"Job {job_id} parameters: {safe_params}")
                     logger.error("Traceback:", exc_info=True)
                     send_error(job_id, error_msg)

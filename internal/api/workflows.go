@@ -56,6 +56,20 @@ type QwenRequest struct {
 	LoRAs             []string `json:"loras"`
 }
 
+// Chat Message
+type ChatMessage struct {
+	Role    string `json:"role"`    // "user", "assistant", "system"
+	Content string `json:"content"` // Message content
+}
+
+// Chat Request
+type ChatRequest struct {
+	Messages    []ChatMessage `json:"messages"`
+	MaxTokens   int           `json:"max_tokens"`
+	Temperature float64       `json:"temperature"`
+	TopP        float64       `json:"top_p"`
+}
+
 // Job Response
 type JobResponse struct {
 	ID     string `json:"id"`
@@ -315,6 +329,103 @@ func (s *Server) handleQwenSubmit(w http.ResponseWriter, r *http.Request) {
 	}
 
 	log.Printf("Qwen: Job %s queued successfully", jobID)
+	json.NewEncoder(w).Encode(JobResponse{
+		ID:     jobID,
+		Status: "pending",
+	})
+}
+
+func (s *Server) handleChatSubmit(w http.ResponseWriter, r *http.Request) {
+	var req ChatRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	// Validate input
+	if len(req.Messages) == 0 {
+		http.Error(w, "No messages provided", http.StatusBadRequest)
+		return
+	}
+
+	// Validate each message
+	for _, msg := range req.Messages {
+		if msg.Role != "user" && msg.Role != "assistant" && msg.Role != "system" {
+			http.Error(w, "Invalid message role (must be user, assistant, or system)", http.StatusBadRequest)
+			return
+		}
+		if len(msg.Content) > 4000 {
+			http.Error(w, "Message content too long (max 4000 characters)", http.StatusBadRequest)
+			return
+		}
+	}
+
+	// Set defaults
+	if req.MaxTokens == 0 {
+		req.MaxTokens = 512
+	}
+	if req.Temperature == 0 {
+		req.Temperature = 0.7
+	}
+	if req.TopP == 0 {
+		req.TopP = 0.9
+	}
+
+	// Clamp values
+	if req.MaxTokens > 2048 {
+		req.MaxTokens = 2048
+	}
+	if req.Temperature < 0 {
+		req.Temperature = 0
+	}
+	if req.Temperature > 2.0 {
+		req.Temperature = 2.0
+	}
+	if req.TopP < 0 {
+		req.TopP = 0
+	}
+	if req.TopP > 1.0 {
+		req.TopP = 1.0
+	}
+
+	// Create job
+	jobID := uuid.New().String()
+
+	// Persist job to database
+	paramsJSON, err := json.Marshal(req)
+	if err != nil {
+		log.Printf("Chat: Failed to serialize params for job %s: %v", jobID, err)
+		http.Error(w, "Failed to serialize params", http.StatusInternalServerError)
+		return
+	}
+
+	dbJob := &db.Job{
+		ID:     jobID,
+		Type:   "chat",
+		Status: "pending",
+		Params: string(paramsJSON),
+	}
+	if err := s.db.CreateJob(dbJob); err != nil {
+		log.Printf("Chat: Failed to persist job %s: %v", jobID, err)
+		http.Error(w, "Failed to create job", http.StatusInternalServerError)
+		return
+	}
+
+	// Queue job
+	job := map[string]interface{}{
+		"id":     jobID,
+		"type":   "chat",
+		"params": req,
+		"status": "pending",
+	}
+
+	if err := s.queue.Enqueue("jobs", job); err != nil {
+		log.Printf("Chat: Failed to enqueue job %s: %v", jobID, err)
+		http.Error(w, "Failed to queue job", http.StatusInternalServerError)
+		return
+	}
+
+	log.Printf("Chat: Job %s queued successfully", jobID)
 	json.NewEncoder(w).Encode(JobResponse{
 		ID:     jobID,
 		Status: "pending",
