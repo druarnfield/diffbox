@@ -25,7 +25,8 @@ export function ChatForm({ className }: ChatFormProps) {
   const [input, setInput] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const { addJob, updateJob } = useJobStore();
+  const addJob = useJobStore((state) => state.addJob);
+  const jobs = useJobStore((state) => state.jobs);
 
   // Auto-scroll to bottom when messages change
   useEffect(() => {
@@ -34,12 +35,9 @@ export function ChatForm({ className }: ChatFormProps) {
 
   // Listen for completed chat jobs to add assistant responses
   useEffect(() => {
-    const jobs = useJobStore.getState().jobs;
     const latestChatJob = jobs
       .filter((j) => j.type === "chat")
-      .sort(
-        (a, b) => b.createdAt.getTime() - a.createdAt.getTime(),
-      )[0];
+      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())[0];
 
     if (latestChatJob?.status === "completed" && latestChatJob.output) {
       const response = (latestChatJob.output as { response?: string })
@@ -55,7 +53,7 @@ export function ChatForm({ className }: ChatFormProps) {
         });
       }
     }
-  }, [useJobStore.getState().jobs]);
+  }, [jobs]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
