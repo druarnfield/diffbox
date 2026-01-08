@@ -64,12 +64,13 @@ RUN go build -o /usr/local/bin/diffbox ./cmd/server
 
 # Build frontend
 WORKDIR /app/diffbox/web
-RUN apt-get update && apt-get install -y nodejs npm && \
+RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - && \
+    apt-get install -y nodejs && \
     npm ci && \
     npm run build && \
     mkdir -p /app/diffbox/static && \
     cp -r dist/* /app/diffbox/static/ && \
-    apt-get remove -y nodejs npm && \
+    apt-get remove -y nodejs && \
     apt-get autoremove -y && \
     rm -rf /var/lib/apt/lists/*
 
