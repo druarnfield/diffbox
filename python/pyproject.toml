@@ -20,6 +20,7 @@ dependencies = [
     "huggingface-hub",
     "modelscope",
     "diffsynth",
+    "vllm>=0.6.0",
 ]
 
 [project.optional-dependencies]

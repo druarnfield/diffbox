@@ -23,6 +23,18 @@ export interface QwenParams {
   cfg_scale?: number;
 }
 
+export interface ChatMessage {
+  role: "user" | "assistant" | "system";
+  content: string;
+}
+
+export interface ChatParams {
+  messages: ChatMessage[];
+  max_tokens?: number;
+  temperature?: number;
+  top_p?: number;
+}
+
 export interface JobResponse {
   id: string;
   status: string;
@@ -82,6 +94,21 @@ export async function submitQwen(params: QwenParams): Promise<JobResponse> {
   if (!response.ok) {
     const error = await response.text();
     throw new Error(error || "Failed to submit Qwen job");
+  }
+
+  return response.json();
+}
+
+export async function submitChat(params: ChatParams): Promise<JobResponse> {
+  const response = await fetch(`${API_BASE}/workflows/chat`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(params),
+  });
+
+  if (!response.ok) {
+    const error = await response.text();
+    throw new Error(error || "Failed to submit Chat job");
   }
 
   return response.json();

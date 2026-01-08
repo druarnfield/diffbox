@@ -47,6 +47,9 @@ def main():
             elif job_type == "qwen":
                 from worker.qwen import QwenHandler
                 handlers[job_type] = QwenHandler(models_dir, outputs_dir)
+            elif job_type == "chat":
+                from worker.chat import ChatHandler
+                handlers[job_type] = ChatHandler(models_dir, outputs_dir)
             else:
                 raise ValueError(f"Unknown job type: {job_type}")
         return handlers[job_type]

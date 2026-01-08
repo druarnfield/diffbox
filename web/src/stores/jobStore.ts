@@ -1,15 +1,18 @@
 import { create } from "zustand";
 
 export interface JobOutput {
-  type: "video" | "image";
-  path: string;
+  type?: "video" | "image";
+  path?: string;
   frames?: number;
   seed?: number;
+  response?: string; // For chat responses
+  tokens?: number; // For chat token count
+  [key: string]: unknown; // Allow other fields
 }
 
 export interface Job {
   id: string;
-  type: "i2v" | "qwen";
+  type: "i2v" | "qwen" | "chat";
   status: "pending" | "running" | "completed" | "failed";
   progress: number;
   stage: string;
