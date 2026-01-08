@@ -7,7 +7,8 @@ ENV DEBIAN_FRONTEND=noninteractive \
     PYTHONUNBUFFERED=1 \
     DIFFBOX_MODELS_DIR=/runpod-volume/models \
     DIFFBOX_OUTPUTS_DIR=/runpod-volume/outputs \
-    COMFYUI_URL=http://localhost:8188
+    COMFYUI_URL=http://localhost:8188 \
+    PYTHONPATH=/app/diffbox/python
 
 # Install system dependencies
 RUN apt-get update && apt-get install -y \
@@ -46,18 +47,18 @@ RUN uv sync --frozen
 # Copy worker source files
 COPY python/worker ./worker
 
+# Install RunPod SDK in the same venv
+RUN uv pip install runpod
+
 # Copy RunPod handler
 WORKDIR /app
 COPY runpod_handler.py ./
-
-# Install RunPod SDK
-RUN pip install --no-cache-dir runpod
 
 # Create directories for models and outputs (will be mounted from RunPod volume)
 RUN mkdir -p /runpod-volume/models /runpod-volume/outputs
 
 # Start ComfyUI in background, then run RunPod handler
-# RunPod will execute: python runpod_handler.py
+# RunPod will execute the handler using uv run to activate the venv
 CMD python /app/comfyui/main.py --listen 0.0.0.0 --port 8188 & \
     sleep 10 && \
-    cd /app && python runpod_handler.py
+    cd /app/diffbox/python && uv run python /app/runpod_handler.py
