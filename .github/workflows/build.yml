@@ -84,31 +84,11 @@ jobs:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           tags: |
             type=raw,value=latest
+            type=raw,value=serverless
             type=sha,prefix=sha-
             type=sha,prefix=sha-,format=short
             type=schedule,pattern={{date 'YYYYMMDD'}}
             type=ref,event=branch
-
-      - name: Build and push RunPod image
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          file: ./Dockerfile.runpod
-          push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-
-      - name: Extract serverless metadata
-        id: meta-serverless
-        uses: docker/metadata-action@v5
-        with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
-          tags: |
-            type=raw,value=serverless-latest
-            type=raw,value=serverless-${{ github.sha }}
-            type=ref,event=branch,suffix=-serverless
 
       - name: Build and push Serverless image
         uses: docker/build-push-action@v6
@@ -116,7 +96,7 @@ jobs:
           context: .
           file: ./Dockerfile.serverless
           push: true
-          tags: ${{ steps.meta-serverless.outputs.tags }}
-          labels: ${{ steps.meta-serverless.outputs.labels }}
-          cache-from: type=gha,scope=serverless
-          cache-to: type=gha,mode=max,scope=serverless
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
