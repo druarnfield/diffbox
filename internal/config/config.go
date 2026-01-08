@@ -17,6 +17,8 @@ type Config struct {
 	Aria2Port           string
 	Aria2MaxConnections int
 
+	ComfyUIURL string
+
 	WorkerCount int
 	PythonPath  string
 }
@@ -34,6 +36,8 @@ func Load() (*Config, error) {
 
 		Aria2Port:           getEnv("DIFFBOX_ARIA2_PORT", "6800"),
 		Aria2MaxConnections: 16,
+
+		ComfyUIURL: getEnv("COMFYUI_URL", "http://localhost:8188"),
 
 		WorkerCount: 1,
 		PythonPath:  getEnv("DIFFBOX_PYTHON_PATH", "./python"),

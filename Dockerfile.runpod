@@ -1,0 +1,99 @@
+# RunPod optimized Dockerfile - single container with ComfyUI + diffbox
+# Supports GPU inference with NVIDIA CUDA 12.1
+
+FROM nvidia/cuda:12.1.0-runtime-ubuntu22.04
+
+ENV DEBIAN_FRONTEND=noninteractive \
+    PYTHONUNBUFFERED=1 \
+    DIFFBOX_PORT=8080 \
+    DIFFBOX_DATA_DIR=/data \
+    DIFFBOX_MODELS_DIR=/models \
+    DIFFBOX_OUTPUTS_DIR=/outputs \
+    COMFYUI_URL=http://localhost:8188
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    python3.11 \
+    python3.11-dev \
+    python3-pip \
+    git \
+    wget \
+    curl \
+    ffmpeg \
+    supervisor \
+    libgl1 \
+    libglib2.0-0 \
+    aria2 \
+    sqlite3 \
+    && rm -rf /var/lib/apt/lists/*
+
+# Make Python 3.11 the default
+RUN update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.11 1 && \
+    update-alternatives --install /usr/bin/python python /usr/bin/python3.11 1
+
+# Upgrade pip
+RUN python3 -m pip install --upgrade pip
+
+# Install ComfyUI
+WORKDIR /app/comfyui
+RUN git clone https://github.com/comfyanonymous/ComfyUI.git . && \
+    pip install --no-cache-dir -r requirements.txt && \
+    pip install --no-cache-dir websocket-client
+
+# Install Go 1.23
+WORKDIR /tmp
+RUN wget https://go.dev/dl/go1.23.4.linux-amd64.tar.gz && \
+    tar -C /usr/local -xzf go1.23.4.linux-amd64.tar.gz && \
+    rm go1.23.4.linux-amd64.tar.gz
+ENV PATH=$PATH:/usr/local/go/bin
+
+# Install uv for Python dependency management
+RUN pip install --no-cache-dir uv
+
+# Copy diffbox source
+WORKDIR /app/diffbox
+COPY . .
+
+# Install Python dependencies
+WORKDIR /app/diffbox/python
+RUN uv sync --frozen
+
+# Build Go binary
+WORKDIR /app/diffbox
+RUN go build -o /usr/local/bin/diffbox ./cmd/server
+
+# Build frontend
+WORKDIR /app/diffbox/web
+RUN apt-get update && apt-get install -y nodejs npm && \
+    npm ci && \
+    npm run build && \
+    mkdir -p /app/diffbox/static && \
+    cp -r dist/* /app/diffbox/static/ && \
+    apt-get remove -y nodejs npm && \
+    apt-get autoremove -y && \
+    rm -rf /var/lib/apt/lists/*
+
+# Configure ComfyUI to use shared model directory
+WORKDIR /app/comfyui
+RUN mkdir -p /models && \
+    echo "diffbox:\n  base_path: /models\n  checkpoints: /models\n  vae: /models\n  loras: /models\n  text_encoders: /models" > extra_model_paths.yaml
+
+# Create supervisor configuration
+RUN mkdir -p /var/log/supervisor
+COPY supervisord.conf /etc/supervisor/conf.d/supervisord.conf
+
+# Create directories
+RUN mkdir -p /data /models /outputs /var/log/comfyui /var/log/diffbox
+
+# Health check script
+COPY healthcheck.sh /usr/local/bin/healthcheck.sh
+RUN chmod +x /usr/local/bin/healthcheck.sh
+
+# Expose ports (8080 for diffbox, 8188 for ComfyUI debug access)
+EXPOSE 8080 8188
+
+# Set working directory
+WORKDIR /app/diffbox
+
+# Start supervisor (runs both ComfyUI and diffbox)
+CMD ["/usr/bin/supervisord", "-n", "-c", "/etc/supervisor/conf.d/supervisord.conf"]

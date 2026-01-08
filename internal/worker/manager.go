@@ -121,6 +121,7 @@ func (m *Manager) spawnWorker(id int) (*Worker, error) {
 	cmd.Env = append(os.Environ(),
 		fmt.Sprintf("DIFFBOX_MODELS_DIR=%s", m.cfg.ModelsDir),
 		fmt.Sprintf("DIFFBOX_OUTPUTS_DIR=%s", m.cfg.OutputsDir),
+		fmt.Sprintf("COMFYUI_URL=%s", m.cfg.ComfyUIURL),
 		fmt.Sprintf("WORKER_ID=%d", id),
 	)
 

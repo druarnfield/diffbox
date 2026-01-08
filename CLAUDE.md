@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-diffbox is a self-hosted web app for AI video/image generation, optimized for ephemeral cloud deployments (RunPod, Vast.ai). It supports three workflows: Wan 2.2 I2V (image-to-video), Wan 2.2 SVI 2.0 Pro (infinite video), and Qwen Image Edit (instruction-based editing with inpainting).
+diffbox is a self-hosted web app for AI video/image generation, optimized for ephemeral cloud deployments (RunPod, Vast.ai). It uses **ComfyUI** as the inference backend via HTTP/WebSocket API. Supports three workflows: Wan 2.2 I2V (image-to-video), Qwen Image Edit (instruction-based editing), and Dolphin-Mistral chat (NSFW prompt generation).
 
 ## Commands
 
@@ -30,11 +30,16 @@ make fmt
 # Lint all code
 make lint
 
-# Build Docker image
+# Build Docker image (development)
 make docker
 
 # Run Docker locally with GPU
 make docker-run
+
+# RunPod deployment (single container with ComfyUI)
+make docker-runpod              # Build optimized RunPod image
+make test-runpod                # Test locally (requires GPU)
+make push-runpod REGISTRY=user  # Push to Docker Hub
 ```
 
 **Frontend-only development:**
@@ -55,12 +60,16 @@ cd python && uv run pytest  # Run Python tests only
 ## Architecture
 
 ```
-React UI → REST API (Go/Chi) → Redis Streams (Valkey) → Python Workers
-                ↓                                            ↓
-          WebSocket Hub ←──────── Progress Updates ←─────────┘
+React UI → REST API (Go/Chi) → Redis Streams (Valkey) → Python Workers → ComfyUI API
+                ↓                                            ↓                ↓
+          WebSocket Hub ←──────── Progress Updates ←────────┴────────────────┘
 ```
 
-**Process model (Docker):** Single container runs Go server (PID 1), Valkey, aria2, and spawned Python workers.
+**Process model (RunPod):** Single container runs:
+- **supervisord** (PID 1) managing:
+  - ComfyUI server (port 8188) - GPU inference backend
+  - diffbox server (port 8080) - Go API server + spawned Python workers
+  - Valkey (Redis) + aria2 (model downloads)
 
 ### Key Directories
 
@@ -69,10 +78,12 @@ React UI → REST API (Go/Chi) → Redis Streams (Valkey) → Python Workers
 - `internal/worker/` - Python worker lifecycle management
 - `internal/queue/` - Redis Streams job queue abstraction
 - `internal/db/` - SQLite persistence
-- `python/worker/` - Inference workers (i2v.py, svi.py, qwen.py)
-- `python/diffsynth/` - Vendored inference library
+- `python/worker/` - Inference workers (i2v.py, qwen.py, chat.py)
+- `python/worker/comfyui_client.py` - ComfyUI HTTP/WebSocket client (TODO: implement)
 - `web/src/pages/` - WorkflowPage, ModelsPage, SettingsPage
 - `web/src/hooks/` - useWebSocket for real-time updates
+- `supervisord.conf` - Process manager config for RunPod
+- `Dockerfile.runpod` - Single-container RunPod build
 
 ### Tech Stack
 
@@ -81,8 +92,10 @@ React UI → REST API (Go/Chi) → Redis Streams (Valkey) → Python Workers
 | Frontend | React 19, TypeScript, TanStack Query, Zustand, Tailwind CSS |
 | Backend | Go 1.23, Chi router, SQLite, Bleve search |
 | Queue | Valkey (Redis fork) + Redis Streams |
-| Python | uv, PyTorch, diffsynth (vendored) |
+| Python | uv, PyTorch, vLLM (chat), aiohttp/websockets (ComfyUI client) |
+| Inference | ComfyUI (HTTP/WebSocket API) |
 | Downloads | aria2 JSON-RPC |
+| Deployment | supervisord (process manager) |
 
 ## API Endpoints
 
@@ -98,9 +111,11 @@ POST /api/config                    - Import config
 GET  /ws                            - WebSocket (real-time progress)
 ```
 
-## Go-Python Communication
+## Communication Flow
 
-Workers communicate via stdin/stdout JSON protocol. The Go server spawns workers and sends job payloads; workers emit progress updates that flow back through WebSocket to the frontend.
+1. **Go ↔ Python**: stdin/stdout JSON protocol (job dispatch, progress updates)
+2. **Python ↔ ComfyUI**: HTTP (workflow submission) + WebSocket (progress tracking)
+3. **Backend ↔ Frontend**: REST API (job control) + WebSocket (real-time updates)
 
 ## Environment Variables
 
@@ -116,3 +131,5 @@ DIFFBOX_VALKEY_ADDR=localhost:6379
 
 - `docs/architecture.md` - Detailed technical specification
 - `docs/handover.md` - Developer context and design decisions
+- `docs/runpod-deployment.md` - RunPod deployment guide
+- `docs/comfyui-integration.md` - ComfyUI integration details (TODO: create)

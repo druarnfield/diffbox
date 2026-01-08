@@ -1,0 +1,49 @@
+# Development files
+.git
+.github
+.vscode
+.idea
+
+# Build artifacts
+*.log
+*.tmp
+/data
+/models
+/outputs
+/static
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+python/.venv
+python/uv.lock
+.pytest_cache/
+
+# Go
+*.exe
+*.dll
+*.dylib
+*.test
+*.out
+vendor/
+
+# Node
+web/node_modules
+web/dist
+web/.vite
+
+# Documentation
+docs/
+*.md
+!README.md
+!CLAUDE.md
+
+# CI/CD
+.github/
+
+# Docker
+docker-compose.yml
+Dockerfile.dev

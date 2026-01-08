@@ -1,262 +1,153 @@
 """
-Wan 2.2 Image-to-Video handler with real diffsynth inference.
+Wan 2.2 Image-to-Video handler using ComfyUI backend.
 """
 
+import asyncio
 import base64
 import logging
-import subprocess
-import tempfile
+import os
 import time
 from io import BytesIO
 from pathlib import Path
 from typing import Optional
 
-import torch
-
-# Import diffsynth components
-from diffsynth import ModelManager, WanVideoPipeline
-from diffsynth.models.wan_video_dit import WanModel
-from diffsynth.models.wan_video_text_encoder import WanTextEncoder
-from diffsynth.models.wan_video_vae import WanVideoVAE
 from PIL import Image
 
+from worker.comfyui_client import ComfyUIClient
+from worker.comfyui_templates import ComfyUIWorkflowBuilder
 from worker.protocol import send_progress
 
 logger = logging.getLogger("worker.i2v")
 
 
-class ProgressTracker:
-    """Custom progress tracker that sends updates via protocol."""
-
-    def __init__(self, job_id: str, total_steps: int):
-        self.job_id = job_id
-        self.total_steps = total_steps
-        self.current_step = 0
-
-    def __call__(self, iterable):
-        """Wrap iterable to track progress."""
-        for item in iterable:
-            yield item
-            self.current_step += 1
-            # Map to 5-95% range (leaving room for load and encode)
-            progress = 0.05 + (self.current_step / self.total_steps) * 0.90
-            send_progress(
-                self.job_id,
-                progress,
-                f"Denoising step {self.current_step}/{self.total_steps}",
-            )
-
-
 class I2VHandler:
-    """Handler for Wan 2.2 I2V (Image-to-Video) workflow."""
+    """Handler for Wan 2.2 I2V (Image-to-Video) workflow via ComfyUI."""
 
     def __init__(self, models_dir: str, outputs_dir: str):
         self.models_dir = Path(models_dir)
         self.outputs_dir = Path(outputs_dir)
-        self.pipeline: Optional[WanVideoPipeline] = None
-        self.model_manager: Optional[ModelManager] = None
+        self.comfyui_url = os.getenv("COMFYUI_URL", "http://localhost:8188")
+        self.client: Optional[ComfyUIClient] = None
+        self.workflow_builder: Optional[ComfyUIWorkflowBuilder] = None
 
-    def _load_pipeline(self):
-        """Lazy load the Wan 2.2 I2V pipeline."""
-        if self.pipeline is not None:
-            return
-
-        logger.info("Loading Wan 2.2 I2V pipeline...")
-        send_progress(None, 0.0, "Loading I2V pipeline...")
-
-        # Log GPU info
-        if torch.cuda.is_available():
-            gpu_name = torch.cuda.get_device_name(0)
-            total_memory = torch.cuda.get_device_properties(0).total_memory / 1e9
-            logger.info(f"GPU: {gpu_name}")
-            logger.info(f"Total VRAM: {total_memory:.1f} GB")
-        else:
-            logger.warning("CUDA not available - will run on CPU (very slow!)")
-
-        # Model paths (downloaded by aria2 on startup)
-        high_noise_path = self.models_dir / "wan2.2_i2v_high_noise_14B_fp16.safetensors"
-        low_noise_path = self.models_dir / "wan2.2_i2v_low_noise_14B_fp16.safetensors"
-        text_encoder_path = self.models_dir / "umt5_xxl_fp16.safetensors"
-        vae_path = self.models_dir / "wan_2.1_vae.safetensors"
-        lightning_high_noise_path = (
-            self.models_dir / "wan2.2_lightning_high_noise.safetensors"
-        )
-        lightning_low_noise_path = (
-            self.models_dir / "wan2.2_lightning_low_noise.safetensors"
-        )
-
-        # Validate models exist
-        for path in [high_noise_path, low_noise_path, text_encoder_path, vae_path]:
-            if not path.exists():
-                error_msg = f"Required model not found: {path}"
-                logger.error(error_msg)
-                raise FileNotFoundError(error_msg)
-
-        logger.info("All model files found, initializing ModelManager...")
-
-        # Initialize ModelManager
-        self.model_manager = ModelManager(
-            torch_dtype=torch.bfloat16,
-            device="cuda",
-        )
-
-        # Load models with explicit model_names and model_classes
-        # Using load_model_from_single_file to bypass auto-detection which may fail
-        # WanVideoPipeline.fetch_models expects: wan_video_text_encoder, wan_video_dit, wan_video_vae
-        logger.info("Loading models into ModelManager...")
-
-        # Load text encoder (wan_video_text_encoder)
-        self.model_manager.load_model_from_single_file(
-            file_path=str(text_encoder_path),
-            model_names=["wan_video_text_encoder"],
-            model_classes=[WanTextEncoder],
-            model_resource="civitai",
-        )
-
-        # Load DiT - both high and low noise variants together (wan_video_dit)
-        self.model_manager.load_model_from_single_file(
-            file_path=[str(high_noise_path), str(low_noise_path)],
-            model_names=["wan_video_dit"],
-            model_classes=[WanModel],
-            model_resource="civitai",
-        )
-
-        # Load VAE (wan_video_vae)
-        self.model_manager.load_model_from_single_file(
-            file_path=str(vae_path),
-            model_names=["wan_video_vae"],
-            model_classes=[WanVideoVAE],
-            model_resource="civitai",
-        )
-
-        # Load Lightning LoRAs if available
-        if lightning_high_noise_path.exists() and lightning_low_noise_path.exists():
-            logger.info("Loading Lightning LoRAs for fast inference...")
-            self.model_manager.load_lora(
-                file_path=str(lightning_high_noise_path), lora_alpha=1.0
-            )
-            self.model_manager.load_lora(
-                file_path=str(lightning_low_noise_path), lora_alpha=1.0
-            )
-            logger.info("Lightning LoRAs loaded")
-        else:
-            logger.warning("Lightning LoRAs not found, using standard inference")
-
-        # Create pipeline from model manager
-        # This calls fetch_models which assigns models and sets up the prompter
-        logger.info("Creating pipeline from ModelManager...")
-        self.pipeline = WanVideoPipeline.from_model_manager(
-            self.model_manager,
-            torch_dtype=torch.bfloat16,
-            device="cuda",
-        )
-
-        # Ensure prompter has tokenizer loaded (downloads from HuggingFace if needed)
-        if (
-            not hasattr(self.pipeline.prompter, "tokenizer")
-            or self.pipeline.prompter.tokenizer is None
-        ):
-            logger.info("Loading tokenizer from google/umt5-xxl...")
-            self.pipeline.prompter.fetch_tokenizer("google/umt5-xxl")
-
-        # Log VRAM usage after loading
-        if torch.cuda.is_available():
-            allocated = torch.cuda.memory_allocated(0) / 1e9
-            reserved = torch.cuda.memory_reserved(0) / 1e9
-            logger.info(
-                f"Pipeline loaded - VRAM allocated: {allocated:.1f} GB, reserved: {reserved:.1f} GB"
-            )
-
-        send_progress(None, 0.0, "Pipeline loaded")
+    def _init_client(self):
+        """Initialize ComfyUI client and workflow builder (lazy)."""
+        if self.client is None:
+            logger.info(f"Initializing ComfyUI client: {self.comfyui_url}")
+            self.client = ComfyUIClient(base_url=self.comfyui_url)
+            self.workflow_builder = ComfyUIWorkflowBuilder()
+            send_progress(None, 0.0, "ComfyUI client initialized")
 
     def run(self, job_id: str, params: dict) -> dict:
-        """Run I2V inference."""
+        """Run I2V inference via ComfyUI."""
         start_time = time.time()
 
         logger.info(f"Starting I2V job {job_id}")
-        # Log params without image data (which can be megabytes of base64)
+        # Log params without image data
         safe_params = {
             k: (f"<{len(v)} chars>" if k == "input_image" else v)
             for k, v in params.items()
         }
         logger.info(f"Parameters: {safe_params}")
 
-        self._load_pipeline()
+        self._init_client()
 
-        # Extract parameters with defaults (optimized for Lightning LoRA)
+        # Extract parameters
         prompt = params.get("prompt", "")
-        negative_prompt = params.get("negative_prompt", "")
         input_image_b64 = params.get("input_image")
         seed = params.get("seed")
-        height = params.get("height", 480)
-        width = params.get("width", 832)
-        num_frames = params.get("num_frames", 81)
-        num_inference_steps = params.get(
-            "num_inference_steps", 4
-        )  # Lightning LoRA uses 4 steps
-        cfg_scale = params.get("cfg_scale", 1.0)  # Lightning LoRA uses minimal CFG
-        denoising_strength = params.get("denoising_strength", 1.0)
-        tiled = params.get("tiled", True)
-        tile_size = params.get("tile_size", (30, 52))
+        num_frames = params.get("num_frames", 49)
+        fps = params.get("fps", 8)
+        cfg_scale = params.get("cfg_scale", 7.0)
+        motion_bucket_id = params.get("motion_bucket_id", 127)
 
-        # Decode input image from base64
+        # Validate input
         if not input_image_b64:
             raise ValueError("input_image is required for I2V")
 
-        send_progress(job_id, 0.02, "Decoding input image")
+        # Decode and upload input image
+        send_progress(job_id, 0.05, "Uploading input image")
         image_data = base64.b64decode(input_image_b64)
         input_image = Image.open(BytesIO(image_data)).convert("RGB")
         logger.info(f"Input image size: {input_image.size}")
 
-        # Set random seed
+        # Generate unique filename for upload
+        upload_filename = f"i2v_input_{job_id}.png"
+
+        # Upload image to ComfyUI
+        uploaded_filename = asyncio.run(
+            self.client.upload_image(input_image, upload_filename)
+        )
+        logger.info(f"Image uploaded as: {uploaded_filename}")
+
+        # Handle seed
         if seed is None or seed == -1:
-            seed = torch.randint(0, 2**32 - 1, (1,)).item()
+            import random
+
+            seed = random.randint(0, 2**32 - 1)
         logger.info(f"Using seed: {seed}")
 
-        # Log VRAM before inference
-        if torch.cuda.is_available():
-            free_memory = (
-                torch.cuda.get_device_properties(0).total_memory
-                - torch.cuda.memory_allocated(0)
-            ) / 1e9
-            logger.info(f"Free VRAM before inference: {free_memory:.1f} GB")
+        # Build workflow from template
+        send_progress(job_id, 0.10, "Building workflow")
+        workflow = self.workflow_builder.build_i2v(
+            prompt=prompt,
+            image_path=uploaded_filename,
+            num_frames=num_frames,
+            fps=fps,
+            seed=seed,
+            cfg_scale=cfg_scale,
+            motion_bucket_id=motion_bucket_id,
+        )
 
-        send_progress(job_id, 0.05, "Starting inference")
+        # Validate workflow
+        self.workflow_builder.validate_workflow(workflow)
+        logger.info(f"Workflow built with {len(workflow)} nodes")
 
-        # Create progress tracker
-        progress_tracker = ProgressTracker(job_id, num_inference_steps)
+        # Progress callback for ComfyUI execution
+        def on_progress(progress: float, stage: str):
+            # Map 0.0-1.0 to 10%-95% range
+            mapped_progress = 0.10 + (progress * 0.85)
+            send_progress(job_id, mapped_progress, stage)
 
+        # Execute workflow
+        send_progress(job_id, 0.10, "Starting ComfyUI execution")
         inference_start = time.time()
 
-        # Run inference
-        video_frames = self.pipeline(
-            prompt=prompt,
-            negative_prompt=negative_prompt,
-            input_image=input_image,
-            height=height,
-            width=width,
-            num_frames=num_frames,
-            num_inference_steps=num_inference_steps,
-            cfg_scale=cfg_scale,
-            denoising_strength=denoising_strength,
-            seed=seed,
-            tiled=tiled,
-            tile_size=tuple(tile_size) if isinstance(tile_size, list) else tile_size,
-            progress_bar_cmd=progress_tracker,
+        result = asyncio.run(
+            self.client.execute_workflow(
+                workflow=workflow, on_progress=on_progress, timeout=600
+            )
         )
 
         inference_duration = time.time() - inference_start
-        fps_generation = num_frames / inference_duration
-        logger.info(
-            f"Inference completed in {inference_duration:.1f}s ({fps_generation:.2f} frames/sec)"
+        logger.info(f"Inference completed in {inference_duration:.1f}s")
+
+        # Extract output file info
+        outputs = result["outputs"]
+        if "video" not in outputs:
+            raise RuntimeError("No video output found in ComfyUI result")
+
+        video_info = outputs["video"]
+        logger.info(f"Output video: {video_info}")
+
+        # Download output video
+        send_progress(job_id, 0.95, "Downloading output video")
+        video_bytes = asyncio.run(
+            self.client.download_output(
+                filename=video_info["filename"],
+                subfolder=video_info.get("subfolder", ""),
+                output_type=video_info.get("type", "output"),
+            )
         )
 
-        send_progress(job_id, 0.95, "Encoding video")
-
-        # Save video
+        # Save to outputs directory
         self.outputs_dir.mkdir(parents=True, exist_ok=True)
         output_path = self.outputs_dir / f"{job_id}.mp4"
-        self._save_video(video_frames, output_path)
+
+        with open(output_path, "wb") as f:
+            f.write(video_bytes)
+
+        logger.info(f"Video saved to {output_path}")
 
         total_duration = time.time() - start_time
         logger.info(f"Job {job_id} total time: {total_duration:.1f}s")
@@ -269,66 +160,3 @@ class I2VHandler:
             "frames": num_frames,
             "seed": seed,
         }
-
-    def _save_video(self, frames: list, output_path: Path, fps: int = 24):
-        """Save frames as MP4 video using ffmpeg."""
-        encode_start = time.time()
-        logger.info(f"Encoding {len(frames)} frames to video at {fps} fps...")
-
-        with tempfile.TemporaryDirectory() as tmpdir:
-            # Save frames as images
-            for i, frame in enumerate(frames):
-                if isinstance(frame, torch.Tensor):
-                    # Convert tensor to numpy
-                    frame_np = frame.cpu().numpy()
-                    # Normalize if needed (assuming 0-1 range)
-                    if frame_np.max() <= 1.0:
-                        frame_np = (frame_np * 255).astype("uint8")
-                    else:
-                        frame_np = frame_np.astype("uint8")
-                    frame = Image.fromarray(frame_np)
-                elif isinstance(frame, Image.Image):
-                    pass  # Already a PIL Image
-                else:
-                    # Try to convert from numpy array
-                    import numpy as np
-
-                    if isinstance(frame, np.ndarray):
-                        if frame.max() <= 1.0:
-                            frame = (frame * 255).astype("uint8")
-                        frame = Image.fromarray(frame)
-
-                frame.save(f"{tmpdir}/frame_{i:05d}.png")
-
-            # Encode with ffmpeg
-            result = subprocess.run(
-                [
-                    "ffmpeg",
-                    "-y",
-                    "-framerate",
-                    str(fps),
-                    "-i",
-                    f"{tmpdir}/frame_%05d.png",
-                    "-c:v",
-                    "libx264",
-                    "-pix_fmt",
-                    "yuv420p",
-                    "-crf",
-                    "18",
-                    str(output_path),
-                ],
-                capture_output=True,
-                check=False,
-            )
-
-            if result.returncode != 0:
-                error_msg = result.stderr.decode("utf-8", errors="replace")
-                logger.error(f"ffmpeg encoding failed (exit code {result.returncode})")
-                logger.error(f"ffmpeg stderr: {error_msg}")
-                raise RuntimeError(
-                    f"Video encoding failed: {error_msg[:500]}"
-                )  # Truncate long error
-
-            encode_duration = time.time() - encode_start
-            logger.info(f"Video encoded in {encode_duration:.1f}s")
-            logger.info(f"Video saved to {output_path}")
